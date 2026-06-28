@@ -1,0 +1,20 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../views/**/*.blade.php';
+
+/* ── Accent color: change ONE line here when the café gives its brand color ── */
+:root {
+    --accent:        #d97706; /* amber-600  — swap this */
+    --accent-hover:  #b45309; /* amber-700 */
+    --accent-light:  #fef3c7; /* amber-100 */
+    --accent-text:   #92400e; /* amber-800 */
+}
+
+[x-cloak] { display: none !important; }
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+}
