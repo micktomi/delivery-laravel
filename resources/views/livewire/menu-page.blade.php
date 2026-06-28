@@ -24,7 +24,7 @@
         }
     }"
     x-init="initScrollSpy()"
-    x-on:cart-updated.window="cartOpen = true"
+    x-on:cart-updated.window="cart = $event.detail.cart || []; cartOpen = true"
     class="min-h-screen bg-gray-50"
 >
 

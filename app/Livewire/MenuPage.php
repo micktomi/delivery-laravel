@@ -68,7 +68,7 @@ class MenuPage extends Component
 
         app(CartService::class)->add($line);
         $this->cart = app(CartService::class)->items();
-        $this->dispatch('cart-updated', count: count($this->cart));
+        $this->dispatch('cart-updated', cart: $this->cart, count: count($this->cart));
     }
 
     public function addToCart(): void
@@ -132,7 +132,7 @@ class MenuPage extends Component
 
         app(CartService::class)->add($line);
         $this->cart = app(CartService::class)->items();
-        $this->dispatch('cart-updated', count: count($this->cart));
+        $this->dispatch('cart-updated', cart: $this->cart, count: count($this->cart));
         $this->openProductId = null;
     }
 
@@ -144,13 +144,14 @@ class MenuPage extends Component
         }
         app(CartService::class)->update($index, $qty);
         $this->cart = app(CartService::class)->items();
+        $this->dispatch('cart-updated', cart: $this->cart, count: count($this->cart));
     }
 
     public function removeFromCart(int $index): void
     {
         app(CartService::class)->remove($index);
         $this->cart = app(CartService::class)->items();
-        $this->dispatch('cart-updated', count: count($this->cart));
+        $this->dispatch('cart-updated', cart: $this->cart, count: count($this->cart));
     }
 
     public function render()
