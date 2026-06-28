@@ -4,11 +4,14 @@ namespace App\Models;
 
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Order extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'display_number', 'status', 'payment_method',
         'customer_name', 'phone', 'address', 'floor_bell', 'notes',

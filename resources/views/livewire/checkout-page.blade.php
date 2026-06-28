@@ -27,9 +27,14 @@
             </div>
         </div>
 
-        <a href="/"
-            class="w-full max-w-xs block py-4 text-white font-black text-xl rounded-2xl text-center active:scale-95 transition shadow-lg"
+        <a href="{{ route('order.track', $confirmedOrderId) }}"
+            class="w-full max-w-xs block py-4 text-white font-black text-xl rounded-2xl text-center active:scale-95 transition shadow-lg mb-3"
             style="background: var(--accent);">
+            Παρακολούθηση παραγγελίας →
+        </a>
+
+        <a href="/"
+            class="w-full max-w-xs block py-4 font-bold text-base rounded-2xl text-center active:scale-95 transition border-2 border-gray-200 text-gray-500">
             Νέα παραγγελία
         </a>
     </div>

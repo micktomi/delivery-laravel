@@ -17,6 +17,7 @@ class CheckoutPage extends Component
     public string $payment_method = PaymentMethod::Cash->value;
 
     public ?int $confirmedOrderNumber = null;
+    public ?int $confirmedOrderId = null;
 
     public function mount(): void
     {
@@ -46,6 +47,7 @@ class CheckoutPage extends Component
         ]);
 
         $this->confirmedOrderNumber = $order->display_number;
+        $this->confirmedOrderId = $order->id;
     }
 
     public function render()
