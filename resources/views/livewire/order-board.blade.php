@@ -76,6 +76,9 @@
     <div class="flex items-center gap-4">
         <span class="font-black text-xl tracking-tight">☕ {{ config('app.name') }}</span>
         <span class="text-gray-400 text-sm">{{ now()->format('d/m/Y · H:i') }}</span>
+        <a href="/kitchen/history" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold transition flex items-center gap-1">
+            📜 Ιστορικό
+        </a>
     </div>
 
     {{-- ── Audio unlock button (D1) ── --}}

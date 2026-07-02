@@ -12,6 +12,7 @@ enum OrderStatus: string implements HasLabel, HasColor
     case Ready = 'ready';
     case Out = 'out';
     case Completed = 'completed';
+    case Cancelled = 'cancelled';
 
     public function getLabel(): string
     {
@@ -21,6 +22,7 @@ enum OrderStatus: string implements HasLabel, HasColor
             self::Ready => 'ΕΤΟΙΜΟ',
             self::Out => 'ΕΦΥΓΕ',
             self::Completed => 'ΟΛΟΚΛΗΡΩΘΗΚΕ',
+            self::Cancelled => 'ΑΚΥΡΩΘΗΚΕ',
         };
     }
 
@@ -32,6 +34,7 @@ enum OrderStatus: string implements HasLabel, HasColor
             self::Ready => 'success',
             self::Out => 'primary',
             self::Completed => 'gray',
+            self::Cancelled => 'danger',
         };
     }
 
@@ -43,6 +46,7 @@ enum OrderStatus: string implements HasLabel, HasColor
             self::Ready => self::Out,
             self::Out => self::Completed,
             self::Completed => null,
+            self::Cancelled => null,
         };
     }
 
