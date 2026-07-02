@@ -90,6 +90,33 @@
         @endforeach
     </div>
 
+    {{-- ══ ORDER SUMMARY ══ --}}
+    <div class="mt-8">
+        <h2 class="font-bold text-gray-500 text-sm uppercase tracking-wider mb-3 px-1">Σύνοψη Παραγγελίας</h2>
+        <div class="bg-white rounded-2xl shadow-sm divide-y divide-gray-100 overflow-hidden">
+            @foreach($order->items as $item)
+                <div class="px-5 py-4">
+                    <div class="flex justify-between items-baseline font-semibold text-base">
+                        <span>{{ $item->quantity }}× {{ $item->product_name }}</span>
+                        <span style="color: var(--accent)">{{ number_format($item->line_total, 2) }}€</span>
+                    </div>
+                    @if(!empty($item->selected_options))
+                        <div class="text-sm text-gray-400 mt-0.5 leading-snug">
+                            {{ collect($item->selected_options)->pluck('value')->implode(' · ') }}
+                        </div>
+                    @endif
+                    @if(!empty($item->notes))
+                        <div class="text-sm mt-0.5" style="color: var(--accent-text)">📝 {{ $item->notes }}</div>
+                    @endif
+                </div>
+            @endforeach
+            <div class="px-5 py-4 flex justify-between items-baseline bg-gray-50">
+                <span class="font-bold text-base text-gray-600">Σύνολο</span>
+                <span class="font-black text-xl" style="color: var(--accent)">{{ number_format($order->total, 2) }}€</span>
+            </div>
+        </div>
+    </div>
+
     {{-- ══ FOOTER NOTE ══ --}}
     <p class="text-center text-xs text-gray-300 mt-10">
         Αυτόματη ενημέρωση κάθε 15 δευτερόλεπτα

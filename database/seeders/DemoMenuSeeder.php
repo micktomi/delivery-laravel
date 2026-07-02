@@ -20,7 +20,7 @@ class DemoMenuSeeder extends Seeder
         $categories = [
             [
                 'name' => 'Καφέδες Κρύοι',
-                'groups' => ['Ζάχαρη', 'Γλυκαντικό', 'Γάλα', 'Extras καφέ'],
+                'groups' => ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Γάλα', 'Extras καφέ'],
                 'products' => [
                     ['name' => 'Freddo Espresso', 'base_price' => 2.80],
                     ['name' => 'Freddo Cappuccino', 'base_price' => 3.20],
@@ -29,7 +29,7 @@ class DemoMenuSeeder extends Seeder
             ],
             [
                 'name' => 'Καφέδες Ζεστοί',
-                'groups' => ['Ζάχαρη', 'Γλυκαντικό', 'Γάλα', 'Extras καφέ'],
+                'groups' => ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Γάλα', 'Extras καφέ'],
                 'products' => [
                     ['name' => 'Espresso', 'base_price' => 2.20],
                     ['name' => 'Cappuccino', 'base_price' => 3.00],

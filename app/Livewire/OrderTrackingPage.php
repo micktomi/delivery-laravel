@@ -12,7 +12,7 @@ class OrderTrackingPage extends Component
 
     public function mount(Order $order): void
     {
-        $this->order = $order;
+        $this->order = $order->load('items');
     }
 
     public function render()

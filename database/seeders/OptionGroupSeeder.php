@@ -20,6 +20,16 @@ class OptionGroupSeeder extends Seeder
     {
         $groups = [
             [
+                'name' => 'Μέγεθος / Δόση',
+                'selection' => SelectionType::Single->value,
+                'is_required' => true,
+                'values' => [
+                    ['name' => 'Κανονικός', 'price_delta' => 0.00, 'is_default' => true],
+                    ['name' => 'Διπλός', 'price_delta' => 0.70, 'is_default' => false],
+                    ['name' => 'Extra Large / Τετραπλός', 'price_delta' => 1.40, 'is_default' => false],
+                ],
+            ],
+            [
                 'name' => 'Ζάχαρη',
                 'selection' => SelectionType::Single->value,
                 'is_required' => true,
