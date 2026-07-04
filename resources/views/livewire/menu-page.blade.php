@@ -14,9 +14,18 @@
                 entries.forEach(e => {
                     if (e.isIntersecting) {
                         this.activeSlug = e.target.dataset.slug;
-                        /* scroll the matching pill into view */
+                        /* scroll the matching pill into view — horizontally, inside the pill nav only.
+                           (scrollIntoView() was walking up to the window for the vertical axis and
+                           snapping the whole page back toward the header, since the hero above it
+                           means the header isn't already at y=0.) */
                         const pill = document.querySelector(`[data-pill='${this.activeSlug}']`);
-                        if (pill) pill.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                        if (pill) {
+                            const nav = pill.parentElement;
+                            nav.scrollTo({
+                                left: pill.offsetLeft - (nav.clientWidth - pill.clientWidth) / 2,
+                                behavior: 'smooth',
+                            });
+                        }
                     }
                 });
             }, { rootMargin: '-96px 0px -55% 0px', threshold: 0 });
