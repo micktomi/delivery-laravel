@@ -25,104 +25,179 @@
     }"
     x-init="initScrollSpy()"
     x-on:cart-updated.window="cart = $event.detail.cart || []; cartOpen = true"
-    class="min-h-screen bg-gray-50"
+    class="min-h-screen bg-gray-50 overflow-x-hidden"
 >
 
-{{-- ══ STICKY HEADER ══ --}}
-<header class="sticky top-0 z-30 bg-white shadow-sm">
-    <div class="flex items-center justify-between px-4 py-3">
-        <h1 class="text-lg font-black tracking-tight text-gray-900">☕ {{ config('app.name') }}</h1>
-        {{-- Cart icon (backup access) --}}
-        <button
-            x-show="cartCount > 0"
-            x-on:click="cartOpen = true"
-            class="relative p-2"
-            x-cloak
-        >
-            <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13l-1.4 7h12.8"/>
-            </svg>
-            <span x-text="cartCount"
-                class="absolute -top-1 -right-1 bg-amber-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center leading-none">
-            </span>
-        </button>
+{{-- ══ HERO ══ --}}
+<section class="hero-gradient text-white">
+    <div class="max-w-6xl mx-auto px-5 sm:px-8 py-10 sm:py-14">
+        <h1 class="text-3xl sm:text-4xl font-black tracking-tight">{{ config('app.name') }}</h1>
+        <p class="mt-2 text-base sm:text-lg font-semibold text-white/90">Καφές • Sandwich • Αναψυκτικά</p>
+        <p class="mt-1 text-sm text-white/70">Γρήγορη παραγγελία για delivery / take away</p>
+    </div>
+</section>
+
+{{-- ══ MAIN SHELL: content column + desktop cart sidebar ══ --}}
+<div class="max-w-6xl mx-auto lg:flex lg:items-start lg:gap-8 lg:px-8">
+
+    <div class="lg:flex-1 min-w-0">
+
+        {{-- ── STICKY HEADER: category pills + mobile cart icon ── --}}
+        <header class="sticky top-0 z-30 bg-white shadow-sm">
+            <div class="flex items-center justify-between px-4 py-2.5 lg:hidden">
+                <span class="text-sm font-black tracking-tight text-gray-900">☕ {{ config('app.name') }}</span>
+                {{-- Cart icon (mobile backup access) --}}
+                <button
+                    x-show="cartCount > 0"
+                    x-on:click="cartOpen = true"
+                    class="relative p-2"
+                    x-cloak
+                >
+                    <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13l-1.4 7h12.8"/>
+                    </svg>
+                    <span x-text="cartCount"
+                        class="absolute -top-1 -right-1 bg-amber-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center leading-none">
+                    </span>
+                </button>
+            </div>
+
+            {{-- Category pills (scroll-spy highlight) --}}
+            <nav class="flex gap-2 px-4 py-3 lg:py-4 overflow-x-auto scrollbar-hide lg:justify-center"
+                style="scroll-snap-type: x mandatory;">
+                @foreach($categories as $category)
+                    <a
+                        href="#cat-{{ $category->slug }}"
+                        data-pill="{{ $category->slug }}"
+                        x-bind:class="activeSlug === '{{ $category->slug }}'
+                            ? 'bg-amber-500 text-white'
+                            : 'bg-gray-100 text-gray-700'"
+                        class="whitespace-nowrap px-4 py-2 rounded-full text-sm font-semibold transition-colors shrink-0"
+                        style="scroll-snap-align: start;"
+                        x-on:click.prevent="
+                            document.getElementById('cat-{{ $category->slug }}').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        "
+                    >{{ $category->name }}</a>
+                @endforeach
+            </nav>
+        </header>
+
+        {{-- ── PRODUCT GRID ── --}}
+        <main class="px-4 lg:px-0 py-6 space-y-10 pb-36 lg:pb-12">
+            @foreach($categories as $category)
+                <section id="cat-{{ $category->slug }}" data-slug="{{ $category->slug }}">
+                    <h2 class="text-base font-bold text-gray-500 uppercase tracking-wider mb-3 px-1">
+                        {{ $category->name }}
+                    </h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3">
+                        @foreach($category->products as $product)
+                            @php $available = $product->is_available; @endphp
+                            <div
+                                class="bg-white rounded-2xl shadow-sm p-4 flex flex-col transition hover:shadow-md
+                                    {{ !$available ? 'opacity-50' : '' }}"
+                                @if($available)
+                                    @if($product->optionGroups->isNotEmpty())
+                                        wire:click="openProduct({{ $product->id }})"
+                                    @else
+                                        wire:click="addDirectly({{ $product->id }})"
+                                    @endif
+                                @endif
+                                {{ $available ? 'role=button' : '' }}
+                            >
+                                <div class="font-semibold text-gray-900 text-base leading-snug">{{ $product->name }}</div>
+                                @if($product->description)
+                                    <div class="text-sm text-gray-400 mt-0.5">{{ $product->description }}</div>
+                                @endif
+
+                                <div class="mt-3 flex items-center justify-between">
+                                    <span class="font-bold text-lg" style="color: var(--accent)">
+                                        {{ number_format($product->base_price, 2) }}€
+                                    </span>
+                                    @if($available)
+                                        <span class="w-10 h-10 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow shrink-0"
+                                            style="background: var(--accent)">
+                                            +
+                                        </span>
+                                    @else
+                                        <span class="text-xs text-gray-400 font-medium whitespace-nowrap">Εξαντλήθηκε</span>
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </section>
+            @endforeach
+        </main>
     </div>
 
-    {{-- ── Category pills (scroll-spy highlight) ── --}}
-    <nav class="flex gap-2 px-4 pb-3 overflow-x-auto scrollbar-hide" style="scroll-snap-type: x mandatory;">
-        @foreach($categories as $category)
-            <a
-                href="#cat-{{ $category->slug }}"
-                data-pill="{{ $category->slug }}"
-                x-bind:class="activeSlug === '{{ $category->slug }}'
-                    ? 'bg-amber-500 text-white'
-                    : 'bg-gray-100 text-gray-700'"
-                class="whitespace-nowrap px-4 py-2 rounded-full text-sm font-semibold transition-colors shrink-0"
-                style="scroll-snap-align: start;"
-                x-on:click.prevent="
-                    document.getElementById('cat-{{ $category->slug }}').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                "
-            >{{ $category->name }}</a>
-        @endforeach
-    </nav>
-</header>
+    {{-- ══ DESKTOP CART SIDEBAR ══ --}}
+    <aside class="hidden lg:block lg:w-[360px] shrink-0">
+        <div class="sticky top-24 bg-white rounded-2xl shadow-sm flex flex-col" style="max-height: calc(100vh - 7rem);">
+            <div class="px-5 py-4 border-b shrink-0">
+                <h2 class="font-black text-lg">Η παραγγελία σου</h2>
+            </div>
 
-{{-- ══ PRODUCT LIST ══ --}}
-<main class="px-3 py-4 space-y-8 pb-36">
-    @foreach($categories as $category)
-        <section id="cat-{{ $category->slug }}" data-slug="{{ $category->slug }}">
-            <h2 class="text-base font-bold text-gray-500 uppercase tracking-wider mb-3 px-1">
-                {{ $category->name }}
-            </h2>
-            <div class="space-y-2">
-                @foreach($category->products as $product)
-                    @php $available = $product->is_available; @endphp
-                    <div
-                        class="bg-white rounded-2xl shadow-sm overflow-hidden flex items-stretch
-                            {{ !$available ? 'opacity-50' : '' }}"
-                        @if($available)
-                            @if($product->optionGroups->isNotEmpty())
-                                wire:click="openProduct({{ $product->id }})"
-                            @else
-                                wire:click="addDirectly({{ $product->id }})"
-                            @endif
-                        @endif
-                        {{ $available ? 'role=button' : '' }}
-                    >
-                        {{-- Info --}}
-                        <div class="flex-1 px-4 py-4 min-w-0">
-                            <div class="font-semibold text-gray-900 text-base leading-snug">{{ $product->name }}</div>
-                            @if($product->description)
-                                <div class="text-sm text-gray-400 mt-0.5 truncate">{{ $product->description }}</div>
-                            @endif
-                            <div class="mt-2 font-bold text-lg" style="color: var(--accent)">
-                                {{ number_format($product->base_price, 2) }}€
+            <div class="flex-1 overflow-y-auto px-4 py-2">
+                <template x-if="cart.length === 0">
+                    <p class="text-center text-gray-400 py-10 text-sm">Το καλάθι είναι άδειο</p>
+                </template>
+                <template x-for="(item, idx) in cart" :key="idx">
+                    <div class="flex items-start gap-3 py-3 border-b border-gray-100 last:border-0">
+                        <div class="flex-1 min-w-0">
+                            <div class="font-semibold text-sm leading-snug" x-text="item.product_name"></div>
+                            <template x-if="item.selected_options && item.selected_options.length">
+                                <div class="text-xs text-gray-400 mt-0.5 leading-snug"
+                                    x-text="item.selected_options.map(o => o.value).join(' · ')">
+                                </div>
+                            </template>
+                            <div class="font-bold text-sm mt-1" style="color: var(--accent)"
+                                x-text="parseFloat(item.line_total).toFixed(2) + '€'">
                             </div>
                         </div>
-                        {{-- Add button --}}
-                        <div class="flex items-center px-4">
-                            @if($available)
-                                <span class="w-10 h-10 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow"
-                                    style="background: var(--accent)">
-                                    +
-                                </span>
-                            @else
-                                <span class="text-xs text-gray-400 font-medium whitespace-nowrap">Εξαντλήθηκε</span>
-                            @endif
+                        <div class="flex items-center gap-1 shrink-0 mt-0.5">
+                            <button
+                                class="w-7 h-7 rounded-full border-2 border-gray-200 flex items-center justify-center text-sm font-bold active:scale-90 transition"
+                                x-on:click="
+                                    if (item.quantity > 1) {
+                                        item.quantity--;
+                                        $wire.updateQty(idx, item.quantity);
+                                    } else {
+                                        cart.splice(idx, 1);
+                                        $wire.removeFromCart(idx);
+                                    }
+                                "
+                            >−</button>
+                            <span class="w-6 text-center font-bold text-sm" x-text="item.quantity"></span>
+                            <button
+                                class="w-7 h-7 rounded-full border-2 border-gray-200 flex items-center justify-center text-sm font-bold active:scale-90 transition"
+                                x-on:click="item.quantity++; $wire.updateQty(idx, item.quantity);"
+                            >+</button>
                         </div>
                     </div>
-                @endforeach
+                </template>
             </div>
-        </section>
-    @endforeach
-</main>
 
-{{-- ══ STICKY BOTTOM CART BAR ══ --}}
+            <div class="px-5 pt-3 pb-5 border-t shrink-0" x-show="cart.length > 0">
+                <div class="flex justify-between items-baseline mb-3">
+                    <span class="text-gray-500 text-sm" x-text="cartCount + ' ' + (cartCount === 1 ? 'προϊόν' : 'προϊόντα')"></span>
+                    <span class="font-black text-xl" style="color: var(--accent)" x-text="subtotal.toFixed(2) + '€'"></span>
+                </div>
+                <a
+                    href="/checkout"
+                    class="block w-full py-3.5 text-white text-center font-black text-base rounded-2xl shadow-lg active:scale-95 transition"
+                    style="background: var(--accent);"
+                >Συνέχεια</a>
+            </div>
+        </div>
+    </aside>
+</div>
+
+{{-- ══ MOBILE STICKY BOTTOM CART BAR ══ --}}
 <div
     x-show="cartCount > 0"
     x-cloak
-    class="fixed bottom-0 left-0 right-0 z-40 px-4 pb-4"
+    class="fixed bottom-0 left-0 right-0 z-40 px-4 pb-4 lg:hidden"
     style="padding-bottom: max(1rem, env(safe-area-inset-bottom));"
 >
     <button
@@ -136,12 +211,12 @@
         </span>
         <span class="flex items-center gap-3">
             <span x-text="subtotal.toFixed(2) + '€'" class="text-lg"></span>
-            <span class="opacity-80 text-sm">Δες καλάθι →</span>
+            <span class="opacity-80 text-sm">Συνέχεια →</span>
         </span>
     </button>
 </div>
 
-{{-- ══ CART BOTTOM SHEET ══ --}}
+{{-- ══ MOBILE CART BOTTOM SHEET ══ --}}
 {{-- Backdrop --}}
 <div
     x-show="cartOpen"
@@ -151,7 +226,7 @@
     x-transition:leave="transition ease-in duration-150"
     x-transition:leave-start="opacity-100"
     x-transition:leave-end="opacity-0"
-    class="fixed inset-0 z-40 bg-black/50"
+    class="fixed inset-0 z-40 bg-black/50 lg:hidden"
     x-on:click="cartOpen = false"
     x-cloak
 ></div>
@@ -165,7 +240,7 @@
     x-transition:leave="transition ease-in duration-200"
     x-transition:leave-start="translate-y-0"
     x-transition:leave-end="translate-y-full"
-    class="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl flex flex-col"
+    class="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl flex flex-col lg:hidden"
     style="max-height: 85vh; padding-bottom: env(safe-area-inset-bottom);"
     x-cloak
 >
@@ -176,7 +251,7 @@
 
     {{-- Title row --}}
     <div class="flex items-center justify-between px-5 py-3 border-b shrink-0">
-        <h2 class="font-black text-lg">Καλάθι</h2>
+        <h2 class="font-black text-lg">Το καλάθι σου</h2>
         <button x-on:click="cartOpen = false" class="text-gray-400 text-3xl leading-none">&times;</button>
     </div>
 
@@ -244,14 +319,14 @@
             href="/checkout"
             class="block w-full py-4 text-white text-center font-black text-lg rounded-2xl shadow-lg active:scale-95 transition"
             style="background: var(--accent);"
-        >Παραγγελία →</a>
+        >Συνέχεια →</a>
     </div>
 </div>
 
-{{-- ══ PRODUCT MODAL (bottom sheet) ══ --}}
+{{-- ══ PRODUCT MODAL (bottom sheet on mobile, centered dialog on desktop) ══ --}}
 @if($openProduct)
 <div
-    class="fixed inset-0 z-50 flex items-end justify-center"
+    class="fixed inset-0 z-50 flex items-end lg:items-center justify-center"
     x-data="{
         selectedOptions: @js($selectedOptions),
         quantity: {{ $quantity }},
@@ -305,11 +380,11 @@
     <div class="absolute inset-0 bg-black/50" wire:click="closeModal"></div>
 
     {{-- Sheet --}}
-    <div class="relative w-full bg-white rounded-t-3xl flex flex-col z-10"
+    <div class="relative w-full bg-white rounded-t-3xl lg:rounded-3xl lg:max-w-lg lg:mx-4 flex flex-col z-10"
         style="max-height: 88vh; padding-bottom: env(safe-area-inset-bottom);">
 
         {{-- Drag handle --}}
-        <div class="flex justify-center pt-3 pb-2 shrink-0">
+        <div class="flex justify-center pt-3 pb-2 shrink-0 lg:hidden">
             <div class="w-10 h-1 bg-gray-200 rounded-full"></div>
         </div>
 

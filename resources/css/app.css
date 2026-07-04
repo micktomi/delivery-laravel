@@ -14,6 +14,18 @@
 
 [x-cloak] { display: none !important; }
 
+/* ── Sticky category pills: hide scrollbar cross-browser ── */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+/* ── Customer hero: CSS-only gradient, follows --accent so it stays on-brand ── */
+.hero-gradient {
+    background: radial-gradient(120% 160% at 15% 0%, var(--accent) 0%, var(--accent-hover) 45%, #1c1206 100%);
+}
+
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
