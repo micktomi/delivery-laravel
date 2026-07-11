@@ -2,8 +2,10 @@
 
 namespace App\Livewire;
 
+use App\Enums\OrderStatus;
 use App\Enums\SelectionType;
 use App\Models\Category;
+use App\Models\Order;
 use App\Models\Product;
 use App\Services\CartService;
 use App\Services\PricingService;
@@ -11,17 +13,42 @@ use Livewire\Component;
 
 class MenuPage extends Component
 {
+    private const LATEST_PUBLIC_ORDER_SESSION_KEY = 'latest_public_order_route_key';
+
     public array $cart = [];
+
+    public ?int $latestTrackableOrderId = null;
 
     // Modal state
     public ?int $openProductId = null;
+
     public array $selectedOptions = [];
+
     public int $quantity = 1;
+
     public string $itemNotes = '';
 
     public function mount(): void
     {
         $this->cart = app(CartService::class)->items();
+
+        $latestOrderRouteKey = session(self::LATEST_PUBLIC_ORDER_SESSION_KEY);
+
+        if (! is_numeric($latestOrderRouteKey)) {
+            session()->forget(self::LATEST_PUBLIC_ORDER_SESSION_KEY);
+
+            return;
+        }
+
+        $latestOrder = Order::query()->find($latestOrderRouteKey);
+
+        if (! $latestOrder || in_array($latestOrder->status, [OrderStatus::Completed, OrderStatus::Cancelled], true)) {
+            session()->forget(self::LATEST_PUBLIC_ORDER_SESSION_KEY);
+
+            return;
+        }
+
+        $this->latestTrackableOrderId = (int) $latestOrder->getRouteKey();
     }
 
     public function openProduct(int $id): void
@@ -82,8 +109,9 @@ class MenuPage extends Component
             $selected = $this->selectedOptions[$group->id] ?? null;
 
             if ($group->selection === SelectionType::Single) {
-                if ($group->is_required && !$selected) {
-                    $this->addError('options', 'Παρακαλώ επιλέξτε για: ' . $group->name);
+                if ($group->is_required && ! $selected) {
+                    $this->addError('options', 'Παρακαλώ επιλέξτε για: '.$group->name);
+
                     return;
                 }
                 if ($selected) {
@@ -100,7 +128,8 @@ class MenuPage extends Component
             } else {
                 $selectedIds = (array) ($selected ?? []);
                 if ($group->is_required && count($selectedIds) < ($group->min_select ?? 1)) {
-                    $this->addError('options', 'Παρακαλώ επιλέξτε για: ' . $group->name);
+                    $this->addError('options', 'Παρακαλώ επιλέξτε για: '.$group->name);
+
                     return;
                 }
                 foreach ($selectedIds as $valueId) {
@@ -140,6 +169,7 @@ class MenuPage extends Component
     {
         if ($qty < 1) {
             $this->removeFromCart($index);
+
             return;
         }
         app(CartService::class)->update($index, $qty);

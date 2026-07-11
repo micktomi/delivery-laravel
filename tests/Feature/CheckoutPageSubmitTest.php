@@ -79,6 +79,8 @@ class CheckoutPageSubmitTest extends TestCase
 
         $order = Order::firstOrFail();
 
+        $this->assertSame($order->getRouteKey(), session('latest_public_order_route_key'));
+
         $component
             ->assertNoRedirect()
             ->assertSet('confirmedOrderId', $order->id)

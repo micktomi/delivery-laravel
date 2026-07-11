@@ -9,14 +9,22 @@ use Livewire\Component;
 
 class CheckoutPage extends Component
 {
+    private const LATEST_PUBLIC_ORDER_SESSION_KEY = 'latest_public_order_route_key';
+
     public string $customer_name = '';
+
     public string $phone = '';
+
     public string $address = '';
+
     public string $floor_bell = '';
+
     public string $notes = '';
+
     public string $payment_method = PaymentMethod::Cash->value;
 
     public ?int $confirmedOrderNumber = null;
+
     public ?int $confirmedOrderId = null;
 
     public function mount(): void
@@ -34,7 +42,7 @@ class CheckoutPage extends Component
             'address' => 'required|string|max:500',
             'floor_bell' => 'nullable|string|max:100',
             'notes' => 'nullable|string|max:500',
-            'payment_method' => 'required|in:' . implode(',', array_column(PaymentMethod::cases(), 'value')),
+            'payment_method' => 'required|in:'.implode(',', array_column(PaymentMethod::cases(), 'value')),
         ]);
 
         $order = app(CreateOrder::class)->execute([
@@ -45,6 +53,8 @@ class CheckoutPage extends Component
             'notes' => $this->notes ?: null,
             'payment_method' => $this->payment_method,
         ]);
+
+        session()->put(self::LATEST_PUBLIC_ORDER_SESSION_KEY, $order->getRouteKey());
 
         $this->confirmedOrderNumber = $order->display_number;
         $this->confirmedOrderId = $order->id;
