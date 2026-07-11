@@ -32,7 +32,8 @@ class ProductCustomizationTest extends TestCase
         Livewire::test(MenuPage::class)
             ->call('openProduct', $product->id)
             ->set('selectedOptions.'.$sizeGroup->id, $doubleValue->id)
-            ->call('addToCart');
+            ->call('addToCart')
+            ->assertDispatched('cart-updated', productId: $product->id);
 
         $cart = app(CartService::class)->items();
         $this->assertCount(1, $cart);
@@ -45,6 +46,17 @@ class ProductCustomizationTest extends TestCase
 
         // Freddo Espresso base price is 2.20, Double is +0.70, total should be 2.90
         $this->assertEquals(2.90, $item['line_total']);
+    }
+
+    public function test_direct_add_dispatches_the_added_product_for_ui_feedback(): void
+    {
+        $this->seed();
+
+        $product = Product::whereDoesntHave('optionGroups')->firstOrFail();
+
+        Livewire::test(MenuPage::class)
+            ->call('addDirectly', $product->id)
+            ->assertDispatched('cart-updated', productId: $product->id);
     }
 
     public function test_complete_order_flow_with_customization(): void

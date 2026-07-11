@@ -3,6 +3,7 @@
     x-data="{
         cartOpen:    false,
         activeSlug:  '{{ $categories->first()?->slug ?? '' }}',
+        addedProductId: null,
         cart: @js($cart),
 
         get cartCount()  { return this.cart.reduce((s, i) => s + i.quantity, 0); },
@@ -33,8 +34,8 @@
         }
     }"
     x-init="initScrollSpy()"
-    x-on:cart-updated.window="cart = $event.detail.cart || []; cartOpen = true"
-    class="min-h-screen bg-gray-50 overflow-x-hidden"
+    x-on:cart-updated.window="cart = $event.detail.cart || []; addedProductId = $event.detail.productId ?? null; cartOpen = true"
+    class="min-h-screen bg-gray-50 overflow-x-clip"
 >
 
 {{-- ══ HERO ══ --}}
@@ -135,10 +136,19 @@
                                         {{ number_format($product->base_price, 2) }}€
                                     </span>
                                     @if($available)
-                                        <span class="w-10 h-10 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow shrink-0"
+                                        <span
+                                            x-show="addedProductId !== {{ $product->id }}"
+                                            class="w-10 h-10 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow shrink-0"
                                             style="background: var(--accent)">
                                             +
                                         </span>
+                                        <span
+                                            x-show="addedProductId === {{ $product->id }}"
+                                            x-cloak
+                                            x-on:animationend="addedProductId = null"
+                                            class="added-to-cart-feedback h-10 rounded-full flex items-center justify-center px-3 text-sm font-bold text-white shadow shrink-0"
+                                            style="background: var(--accent)"
+                                        >✓ Προστέθηκε</span>
                                     @else
                                         <span class="text-xs text-gray-400 font-medium whitespace-nowrap">Εξαντλήθηκε</span>
                                     @endif
@@ -152,8 +162,8 @@
     </div>
 
     {{-- ══ DESKTOP CART SIDEBAR ══ --}}
-    <aside class="hidden lg:block lg:w-[360px] shrink-0">
-        <div class="sticky top-24 bg-white rounded-2xl shadow-sm flex flex-col" style="max-height: calc(100vh - 7rem);">
+    <aside class="hidden lg:block lg:w-[360px] lg:sticky lg:top-24 shrink-0">
+        <div class="bg-white rounded-2xl shadow-sm flex flex-col" style="max-height: calc(100vh - 7rem);">
             <div class="px-5 py-4 border-b shrink-0">
                 <h2 class="font-black text-lg">Η παραγγελία σου</h2>
             </div>
