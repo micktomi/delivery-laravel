@@ -335,6 +335,8 @@
 {{-- ══ PRODUCT MODAL (bottom sheet on mobile, centered dialog on desktop) ══ --}}
 @if($openProduct)
 <div
+    data-product-customization-modal
+    x-on:touchmove.stop
     class="fixed inset-0 z-50 flex items-end lg:items-center justify-center"
     x-data="{
         selectedOptions: @js($selectedOptions),
@@ -389,8 +391,8 @@
     <div class="absolute inset-0 bg-black/50" wire:click="closeModal"></div>
 
     {{-- Sheet --}}
-    <div class="relative w-full bg-white rounded-t-3xl lg:rounded-3xl lg:max-w-lg lg:mx-4 flex flex-col z-10"
-        style="max-height: 88vh; padding-bottom: env(safe-area-inset-bottom);">
+    <div class="relative z-10 flex w-full min-h-0 max-h-[calc(100dvh-env(safe-area-inset-top))] flex-col rounded-t-3xl bg-white lg:mx-4 lg:max-h-[88vh] lg:max-w-lg lg:rounded-3xl"
+        style="padding-bottom: env(safe-area-inset-bottom);">
 
         {{-- Drag handle --}}
         <div class="flex justify-center pt-3 pb-2 shrink-0 lg:hidden">
@@ -409,7 +411,11 @@
         </div>
 
         {{-- Scrollable options --}}
-        <div class="flex-1 overflow-y-auto px-5 py-4 space-y-6">
+        <div
+            x-on:touchmove.stop
+            class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-6"
+            style="-webkit-overflow-scrolling: touch; touch-action: pan-y;"
+        >
             @foreach($openProduct->optionGroups as $group)
                 <div>
                     <div class="flex items-center gap-2 mb-3">

@@ -14,14 +14,37 @@ class DemoMenuSeeder extends Seeder
     public function run(): void
     {
         $this->removeLegacyPlaceholderProducts();
-        $sizeDoseGroup = OptionGroup::query()
-            ->where('name', 'Μέγεθος / Δόση')
-            ->first();
+        $coffeeOptionGroups = OptionGroup::query()
+            ->whereIn('name', [
+                'Μέγεθος / Δόση',
+                'Ζάχαρη',
+                'Γλυκαντικό',
+                'Γάλα',
+                'Extras καφέ',
+            ])
+            ->orderBy('sort_order')
+            ->get();
+
+        $coffeeProductOptionGroupNames = [
+            'Espresso' => ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Extras καφέ'],
+            'Espresso Ristretto' => ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Extras καφέ'],
+            'Espresso Lungo' => ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Extras καφέ'],
+            'Espresso Americano' => ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Extras καφέ'],
+            'Cappuccino' => ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Γάλα', 'Extras καφέ'],
+            'Freddo Espresso' => ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Extras καφέ'],
+            'Freddo Cappuccino' => ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Γάλα', 'Extras καφέ'],
+            'Macchiato' => ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Γάλα', 'Extras καφέ'],
+            'Hot Latte' => ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Γάλα', 'Extras καφέ'],
+            'Iced Latte' => ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Γάλα', 'Extras καφέ'],
+            'Nescafe' => ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Extras καφέ'],
+            'Frappe' => ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Extras καφέ'],
+            'Ελληνικός' => ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Extras καφέ'],
+        ];
 
         $categories = [
             [
                 'name' => 'Καφέδες',
-                'uses_size_dose' => true,
+                'uses_coffee_options' => true,
                 'products' => [
                     ['name' => 'Espresso', 'base_price' => '2.20'],
                     ['name' => 'Espresso Ristretto', 'base_price' => '2.20'],
@@ -40,7 +63,7 @@ class DemoMenuSeeder extends Seeder
             ],
             [
                 'name' => 'Ροφήματα',
-                'uses_size_dose' => false,
+                'uses_coffee_options' => false,
                 'products' => [
                     ['name' => 'Mochaccino', 'base_price' => '4.20'],
                     ['name' => 'Σοκολάτα Ζεστή', 'base_price' => '3.50'],
@@ -52,7 +75,7 @@ class DemoMenuSeeder extends Seeder
             ],
             [
                 'name' => 'Χυμοί',
-                'uses_size_dose' => false,
+                'uses_coffee_options' => false,
                 'products' => [
                     ['name' => 'Πορτοκάλι', 'base_price' => '2.80'],
                     ['name' => 'Ανάμεικτος Φυσικός Χυμός', 'base_price' => '3.50'],
@@ -62,7 +85,7 @@ class DemoMenuSeeder extends Seeder
             ],
             [
                 'name' => 'Γλυκά',
-                'uses_size_dose' => false,
+                'uses_coffee_options' => false,
                 'products' => [
                     ['name' => 'Pancakes', 'base_price' => '4.50'],
                     ['name' => 'Βάφλα Σοκολάτα', 'base_price' => '5.00'],
@@ -75,7 +98,7 @@ class DemoMenuSeeder extends Seeder
             ],
             [
                 'name' => 'Αλμυρά',
-                'uses_size_dose' => false,
+                'uses_coffee_options' => false,
                 'products' => [
                     ['name' => 'Τυρόπιτα', 'base_price' => '2.00'],
                     ['name' => 'Λουκανικόπιτα', 'base_price' => '2.50'],
@@ -88,7 +111,7 @@ class DemoMenuSeeder extends Seeder
             ],
             [
                 'name' => 'Αναψυκτικά',
-                'uses_size_dose' => false,
+                'uses_coffee_options' => false,
                 'products' => [
                     ['name' => 'Coca-Cola 330ml', 'base_price' => '2.00'],
                     ['name' => 'Coca-Cola Zero 330ml', 'base_price' => '2.00'],
@@ -122,10 +145,29 @@ class DemoMenuSeeder extends Seeder
                     ],
                 );
 
-                if ($categoryData['uses_size_dose'] && $sizeDoseGroup) {
-                    $product->optionGroups()->syncWithoutDetaching([
-                        $sizeDoseGroup->id => ['sort_order' => 0],
-                    ]);
+                if ($categoryData['uses_coffee_options']) {
+                    $assignedGroupNames = $coffeeProductOptionGroupNames[$product->name] ?? [];
+                    $attachedGroupIds = $product->optionGroups()
+                        ->pluck('option_groups.id')
+                        ->all();
+
+                    $missingCoffeeOptionGroups = $coffeeOptionGroups
+                        ->whereIn('name', $assignedGroupNames)
+                        ->reject(fn (OptionGroup $group) => in_array($group->id, $attachedGroupIds, true))
+                        ->mapWithKeys(fn (OptionGroup $group) => [
+                            $group->id => ['sort_order' => $group->sort_order],
+                        ])
+                        ->all();
+
+                    if ($missingCoffeeOptionGroups) {
+                        $product->optionGroups()->syncWithoutDetaching($missingCoffeeOptionGroups);
+                    }
+
+                    $milkOptionGroup = $coffeeOptionGroups->firstWhere('name', 'Γάλα');
+
+                    if ($milkOptionGroup && ! in_array('Γάλα', $assignedGroupNames, true)) {
+                        $product->optionGroups()->detach($milkOptionGroup->id);
+                    }
                 }
             }
         }

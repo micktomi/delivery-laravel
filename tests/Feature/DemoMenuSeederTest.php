@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Category;
-use App\Models\OptionGroup;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
@@ -63,17 +62,54 @@ class DemoMenuSeederTest extends TestCase
         }
     }
 
-    public function test_size_dose_options_are_attached_only_to_coffees(): void
+    public function test_coffee_option_groups_follow_the_explicit_product_assignment_map(): void
     {
         $this->seed(OptionGroupSeeder::class);
         $this->seed(DemoMenuSeeder::class);
 
         $coffeeCategory = Category::query()->where('name', 'Καφέδες')->firstOrFail();
-        $sizeDoseGroup = OptionGroup::query()->where('name', 'Μέγεθος / Δόση')->firstOrFail();
+        $coffeeGroupsWithoutMilk = [
+            'Μέγεθος / Δόση',
+            'Ζάχαρη',
+            'Γλυκαντικό',
+            'Extras καφέ',
+        ];
+        $coffeeGroupsWithMilk = [
+            'Μέγεθος / Δόση',
+            'Ζάχαρη',
+            'Γλυκαντικό',
+            'Γάλα',
+            'Extras καφέ',
+        ];
+        $expectedGroupsByProduct = [
+            'Espresso' => $coffeeGroupsWithoutMilk,
+            'Espresso Ristretto' => $coffeeGroupsWithoutMilk,
+            'Espresso Lungo' => $coffeeGroupsWithoutMilk,
+            'Espresso Americano' => $coffeeGroupsWithoutMilk,
+            'Cappuccino' => $coffeeGroupsWithMilk,
+            'Freddo Espresso' => $coffeeGroupsWithoutMilk,
+            'Freddo Cappuccino' => $coffeeGroupsWithMilk,
+            'Macchiato' => $coffeeGroupsWithMilk,
+            'Hot Latte' => $coffeeGroupsWithMilk,
+            'Iced Latte' => $coffeeGroupsWithMilk,
+            'Nescafe' => $coffeeGroupsWithoutMilk,
+            'Frappe' => $coffeeGroupsWithoutMilk,
+            'Ελληνικός' => $coffeeGroupsWithoutMilk,
+        ];
 
-        foreach ($coffeeCategory->products as $product) {
-            $this->assertSame([$sizeDoseGroup->id], $product->optionGroups()->pluck('option_groups.id')->all());
+        foreach ($expectedGroupsByProduct as $productName => $expectedGroups) {
+            $product = $coffeeCategory->products()
+                ->where('name', $productName)
+                ->with('optionGroups')
+                ->firstOrFail();
+
+            $this->assertSame($expectedGroups, $product->optionGroups->pluck('name')->all(), $productName);
         }
+
+        $this->assertNotContains('Γάλα', $expectedGroupsByProduct['Freddo Espresso']);
+        $this->assertContains('Γάλα', $expectedGroupsByProduct['Freddo Cappuccino']);
+        $this->assertContains('Γάλα', $expectedGroupsByProduct['Cappuccino']);
+        $this->assertNotContains('Γάλα', $expectedGroupsByProduct['Espresso']);
 
         $this->assertSame(
             0,
