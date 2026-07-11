@@ -2,10 +2,14 @@
 
 namespace Tests\Feature;
 
-use App\Models\Product;
+use App\Enums\PaymentMethod;
+use App\Livewire\CheckoutPage;
+use App\Livewire\MenuPage;
 use App\Models\OptionGroup;
 use App\Models\OptionValue;
-use App\Livewire\MenuPage;
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\User;
 use App\Services\CartService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -27,7 +31,7 @@ class ProductCustomizationTest extends TestCase
 
         Livewire::test(MenuPage::class)
             ->call('openProduct', $product->id)
-            ->set('selectedOptions.' . $sizeGroup->id, $doubleValue->id)
+            ->set('selectedOptions.'.$sizeGroup->id, $doubleValue->id)
             ->call('addToCart');
 
         $cart = app(CartService::class)->items();
@@ -39,8 +43,8 @@ class ProductCustomizationTest extends TestCase
         $options = collect($item['selected_options']);
         $this->assertTrue($options->contains('value', 'Διπλός'));
 
-        // Freddo Espresso base price is 2.80, Double is +0.70, total should be 3.50
-        $this->assertEquals(3.50, $item['line_total']);
+        // Freddo Espresso base price is 2.20, Double is +0.70, total should be 2.90
+        $this->assertEquals(2.90, $item['line_total']);
     }
 
     public function test_complete_order_flow_with_customization(): void
@@ -56,26 +60,26 @@ class ProductCustomizationTest extends TestCase
         // 1. Add Freddo Espresso with Double size to cart
         Livewire::test(MenuPage::class)
             ->call('openProduct', $product->id)
-            ->set('selectedOptions.' . $sizeGroup->id, $doubleValue->id)
+            ->set('selectedOptions.'.$sizeGroup->id, $doubleValue->id)
             ->call('addToCart');
 
         // 2. Submit the order via checkout page
-        Livewire::test(\App\Livewire\CheckoutPage::class)
+        Livewire::test(CheckoutPage::class)
             ->set('customer_name', 'Μιχάλης')
             ->set('phone', '6912345678')
             ->set('address', 'Δημοκρατίας 42')
-            ->set('payment_method', \App\Enums\PaymentMethod::Cash->value)
+            ->set('payment_method', PaymentMethod::Cash->value)
             ->call('submit')
             ->assertHasNoErrors();
 
         // 3. Confirm order is in DB and values match
-        $order = \App\Models\Order::firstOrFail();
+        $order = Order::firstOrFail();
         $this->assertEquals('Μιχάλης', $order->customer_name);
-        $this->assertEquals(3.50, $order->total); // 2.80 base + 0.70 double
+        $this->assertEquals(2.90, $order->total); // 2.20 base + 0.70 double
 
         $item = $order->items()->firstOrFail();
         $this->assertEquals('Freddo Espresso', $item->product_name);
-        $this->assertEquals(3.50, $item->line_total);
+        $this->assertEquals(2.90, $item->line_total);
 
         // Confirm options contains "Διπλός"
         $options = collect($item->selected_options);
@@ -85,10 +89,10 @@ class ProductCustomizationTest extends TestCase
         $this->get(route('order.track', $order))
             ->assertOk()
             ->assertSee('Διπλός')
-            ->assertSee('3.50€');
+            ->assertSee('2.90€');
 
         // 5. Confirm kitchen board shows the size option
-        $user = \App\Models\User::factory()->create();
+        $user = User::factory()->create();
         $this->actingAs($user)
             ->get(route('kitchen'))
             ->assertOk()
