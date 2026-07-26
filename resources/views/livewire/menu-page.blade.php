@@ -73,10 +73,10 @@
                 </button>
             </div>
 
-            @if($latestTrackableOrderId)
+            @if($latestTrackableOrderToken)
                 <div class="flex justify-center px-4 pt-2 sm:justify-end">
                     <a
-                        href="{{ route('order.track', $latestTrackableOrderId) }}"
+                        href="{{ route('order.track', $latestTrackableOrderToken) }}"
                         class="inline-flex items-center rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-800 transition hover:bg-amber-200"
                     >
                         Παρακολούθηση παραγγελίας

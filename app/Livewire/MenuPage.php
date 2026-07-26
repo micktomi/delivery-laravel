@@ -7,17 +7,21 @@ use App\Enums\SelectionType;
 use App\Models\Category;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\OptionValue;
 use App\Services\CartService;
 use App\Services\PricingService;
+use Illuminate\Support\Str;
 use Livewire\Component;
 
 class MenuPage extends Component
 {
     private const LATEST_PUBLIC_ORDER_SESSION_KEY = 'latest_public_order_route_key';
 
+    private const MAX_ITEM_NOTES = 255;
+
     public array $cart = [];
 
-    public ?int $latestTrackableOrderId = null;
+    public ?string $latestTrackableOrderToken = null;
 
     // Modal state
     public ?int $openProductId = null;
@@ -34,13 +38,13 @@ class MenuPage extends Component
 
         $latestOrderRouteKey = session(self::LATEST_PUBLIC_ORDER_SESSION_KEY);
 
-        if (! is_numeric($latestOrderRouteKey)) {
+        if (! is_string($latestOrderRouteKey) || $latestOrderRouteKey === '') {
             session()->forget(self::LATEST_PUBLIC_ORDER_SESSION_KEY);
 
             return;
         }
 
-        $latestOrder = Order::query()->find($latestOrderRouteKey);
+        $latestOrder = Order::query()->where('public_token', $latestOrderRouteKey)->first();
 
         if (! $latestOrder || in_array($latestOrder->status, [OrderStatus::Completed, OrderStatus::Cancelled], true)) {
             session()->forget(self::LATEST_PUBLIC_ORDER_SESSION_KEY);
@@ -48,12 +52,12 @@ class MenuPage extends Component
             return;
         }
 
-        $this->latestTrackableOrderId = (int) $latestOrder->getRouteKey();
+        $this->latestTrackableOrderToken = $latestOrder->getRouteKey();
     }
 
     public function openProduct(int $id): void
     {
-        $product = Product::with('optionGroups.optionValues')->findOrFail($id);
+        $product = $this->menuProduct($id, withOptions: true);
 
         $this->openProductId = $id;
         $this->quantity = 1;
@@ -81,7 +85,7 @@ class MenuPage extends Component
 
     public function addDirectly(int $id): void
     {
-        $product = Product::findOrFail($id);
+        $product = $this->menuProduct($id);
 
         $line = [
             'product_id' => $product->id,
@@ -100,7 +104,7 @@ class MenuPage extends Component
 
     public function addToCart(): void
     {
-        $product = Product::with('optionGroups.optionValues')->findOrFail($this->openProductId);
+        $product = $this->menuProduct((int) $this->openProductId, withOptions: true);
 
         $snapshotOptions = [];
         $deltas = [];
@@ -117,46 +121,50 @@ class MenuPage extends Component
                 if ($selected) {
                     $value = $group->optionValues->firstWhere('id', (int) $selected);
                     if ($value) {
-                        $snapshotOptions[] = [
-                            'group' => $group->name,
-                            'value' => $value->name,
-                            'price_delta' => (float) $value->price_delta,
-                        ];
+                        $snapshotOptions[] = $this->optionSnapshot($group->name, $value);
                         $deltas[] = (float) $value->price_delta;
                     }
                 }
             } else {
-                $selectedIds = (array) ($selected ?? []);
+                // Duplicate ids would let the same option be counted many times.
+                $selectedIds = array_unique(array_map('intval', (array) ($selected ?? [])));
+
                 if ($group->is_required && count($selectedIds) < ($group->min_select ?? 1)) {
                     $this->addError('options', 'Παρακαλώ επιλέξτε για: '.$group->name);
 
                     return;
                 }
+
+                if ($group->max_select !== null && count($selectedIds) > $group->max_select) {
+                    $this->addError('options', 'Επιλέξτε έως '.$group->max_select.' για: '.$group->name);
+
+                    return;
+                }
+
                 foreach ($selectedIds as $valueId) {
-                    $value = $group->optionValues->firstWhere('id', (int) $valueId);
+                    $value = $group->optionValues->firstWhere('id', $valueId);
                     if ($value) {
-                        $snapshotOptions[] = [
-                            'group' => $group->name,
-                            'value' => $value->name,
-                            'price_delta' => (float) $value->price_delta,
-                        ];
+                        $snapshotOptions[] = $this->optionSnapshot($group->name, $value);
                         $deltas[] = (float) $value->price_delta;
                     }
                 }
             }
         }
 
+        $quantity = app(CartService::class)->normalizeQuantity($this->quantity);
+        $this->quantity = $quantity;
+
         $pricing = app(PricingService::class);
-        $lineTotal = $pricing->lineTotal((float) $product->base_price, $deltas, $this->quantity);
+        $lineTotal = $pricing->lineTotal((float) $product->base_price, $deltas, $quantity);
 
         $line = [
             'product_id' => $product->id,
             'product_name' => $product->name,
             'base_price' => (float) $product->base_price,
             'selected_options' => $snapshotOptions,
-            'quantity' => $this->quantity,
+            'quantity' => $quantity,
             'line_total' => $lineTotal,
-            'notes' => $this->itemNotes,
+            'notes' => Str::limit(trim($this->itemNotes), self::MAX_ITEM_NOTES, ''),
         ];
 
         app(CartService::class)->add($line);
@@ -184,6 +192,29 @@ class MenuPage extends Component
         $this->dispatch('cart-updated', cart: $this->cart, count: count($this->cart));
     }
 
+    /**
+     * Only products that are actually on the menu can enter a cart: available,
+     * and in an active category. Ids come from the browser.
+     */
+    private function menuProduct(int $id, bool $withOptions = false): Product
+    {
+        return Product::query()
+            ->available()
+            ->whereHas('category', fn ($q) => $q->where('is_active', true))
+            ->when($withOptions, fn ($q) => $q->with('optionGroups.optionValues'))
+            ->findOrFail($id);
+    }
+
+    private function optionSnapshot(string $groupName, OptionValue $value): array
+    {
+        return [
+            'option_value_id' => $value->id,
+            'group' => $groupName,
+            'value' => $value->name,
+            'price_delta' => (float) $value->price_delta,
+        ];
+    }
+
     public function render()
     {
         $categories = Category::with([
@@ -195,7 +226,11 @@ class MenuPage extends Component
             ->filter(fn ($cat) => $cat->products->isNotEmpty());
 
         $openProduct = $this->openProductId
-            ? Product::with('optionGroups.optionValues')->find($this->openProductId)
+            ? Product::query()
+                ->available()
+                ->whereHas('category', fn ($q) => $q->where('is_active', true))
+                ->with('optionGroups.optionValues')
+                ->find($this->openProductId)
             : null;
 
         return view('livewire.menu-page', compact('categories', 'openProduct'))

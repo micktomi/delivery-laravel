@@ -27,7 +27,7 @@
             </div>
         </div>
 
-        <a href="{{ route('order.track', $confirmedOrderId) }}"
+        <a href="{{ route('order.track', $confirmedOrderToken) }}"
             class="w-full max-w-xs block py-4 text-white font-black text-xl rounded-2xl text-center active:scale-95 transition shadow-lg mb-3"
             style="background: var(--accent);">
             Παρακολούθηση παραγγελίας →
@@ -40,6 +40,15 @@
     </div>
 
 @else
+
+{{-- ══ CHECKOUT / CART PROBLEMS ══ --}}
+@if($errors->has('checkout') || $errors->has('cart'))
+    <div class="px-4 pt-4">
+        <div class="rounded-2xl border-2 border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {{ $errors->first('checkout') ?: $errors->first('cart') }}
+        </div>
+    </div>
+@endif
 
 {{-- ══ CART SUMMARY ══ --}}
 <div class="px-4 pt-5 pb-2">

@@ -26,6 +26,15 @@
         @endif
     </div>
 
+    {{-- ══ CANCELLED ══ --}}
+    @if($isCancelled)
+        <div class="mb-8 rounded-2xl border-2 border-red-200 bg-red-50 px-5 py-4 text-center">
+            <div class="text-2xl mb-1">🚫</div>
+            <div class="font-black text-base text-red-700">Η παραγγελία ακυρώθηκε</div>
+            <div class="text-sm text-red-500 mt-0.5">Επικοινωνήστε μαζί μας για οποιαδήποτε διευκρίνιση.</div>
+        </div>
+    @endif
+
     {{-- ══ PROGRESS STEPS ══ --}}
     @php
         $icons = ['📋', '☕', '✅', '🛵', '🏠'];

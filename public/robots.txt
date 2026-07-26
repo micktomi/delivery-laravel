@@ -1,2 +1,5 @@
 User-agent: *
-Disallow:
+Disallow: /order/
+Disallow: /checkout
+Disallow: /kitchen
+Disallow: /admin

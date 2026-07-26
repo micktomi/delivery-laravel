@@ -18,11 +18,13 @@ class OrderTrackingPage extends Component
     public function render()
     {
         $steps = OrderStatus::orderedStatuses();
+        $isCancelled = $this->order->status === OrderStatus::Cancelled;
         $currentIndex = array_search($this->order->status, $steps, true);
 
         return view('livewire.order-tracking-page', [
             'steps' => $steps,
-            'currentIndex' => $currentIndex,
+            'currentIndex' => $currentIndex === false ? -1 : $currentIndex,
+            'isCancelled' => $isCancelled,
         ])->layout('layouts.app');
     }
 }

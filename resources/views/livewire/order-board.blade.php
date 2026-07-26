@@ -71,6 +71,13 @@
     </button>
 </div>
 
+{{-- ══ CONFLICT / ERROR BANNER ══ --}}
+@error('board')
+    <div class="shrink-0 bg-amber-500 text-amber-950 px-6 py-3 font-bold text-lg">
+        ⚠️ {{ $message }}
+    </div>
+@enderror
+
 {{-- ══ HEADER ══ --}}
 <header class="shrink-0 bg-gray-900 text-white px-5 py-3 flex items-center justify-between">
     <div class="flex items-center gap-4">
@@ -181,9 +188,9 @@
                             {{-- Advance button --}}
                             @if($status->nextStatus() !== null)
                                 <button
-                                    wire:click="advance({{ $order->id }})"
+                                    wire:click="advance({{ $order->id }}, '{{ $status->value }}')"
                                     wire:loading.attr="disabled"
-                                    wire:target="advance({{ $order->id }})"
+                                    wire:target="advance({{ $order->id }}, '{{ $status->value }}')"
                                     class="mt-3 w-full py-3 text-base font-black rounded-xl transition active:scale-95
                                         @if($status->value === 'nea')       bg-blue-500   hover:bg-blue-600   text-white
                                         @elseif($status->value === 'preparing') bg-green-500  hover:bg-green-600  text-white
@@ -194,6 +201,17 @@
                                     → {{ $status->nextStatus()->getLabel() }}
                                 </button>
                             @endif
+
+                            {{-- Cancel --}}
+                            <button
+                                wire:click="cancel({{ $order->id }})"
+                                wire:loading.attr="disabled"
+                                wire:target="cancel({{ $order->id }})"
+                                wire:confirm="Ακύρωση της παραγγελίας #{{ str_pad($order->display_number, 3, '0', STR_PAD_LEFT) }};"
+                                class="mt-2 w-full py-2 text-sm font-bold rounded-xl border-2 border-gray-200 text-gray-400 hover:border-red-300 hover:text-red-600 transition"
+                            >
+                                Ακύρωση
+                            </button>
                         </div>
                     @empty
                         <div class="flex items-center justify-center h-32 text-gray-300 text-2xl">—</div>

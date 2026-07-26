@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Actions\CancelOrder;
 use App\Actions\TransitionOrderStatus;
 use App\Enums\OrderStatus;
 use App\Filament\Resources\OrderResource\Pages;
@@ -14,10 +15,14 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Validation\ValidationException;
 
 class OrderResource extends Resource
 {
     protected static ?string $model = Order::class;
+
+    // Public tracking uses an unguessable token; admin URLs stay on the id.
+    protected static ?string $recordRouteKeyName = 'id';
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
     protected static ?string $navigationLabel = 'Παραγγελίες';
     protected static ?string $modelLabel = 'Παραγγελία';
@@ -72,10 +77,32 @@ class OrderResource extends Resource
                     ->visible(fn (Order $record) => $record->status->nextStatus() !== null)
                     ->action(function (Order $record) {
                         try {
-                            app(TransitionOrderStatus::class)->execute($record);
+                            // The status this row was rendered with guards against
+                            // acting on a table that another device already moved on.
+                            app(TransitionOrderStatus::class)->execute($record, $record->status);
                             Notification::make()->title('Κατάσταση ενημερώθηκε')->success()->send();
-                        } catch (\Exception $e) {
-                            Notification::make()->title($e->getMessage())->danger()->send();
+                        } catch (ValidationException $e) {
+                            Notification::make()->title($e->validator->errors()->first())->danger()->send();
+                        }
+                    }),
+                Tables\Actions\Action::make('cancel')
+                    ->label('Ακύρωση')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalHeading('Ακύρωση παραγγελίας')
+                    ->modalDescription('Η ακύρωση είναι οριστική και η παραγγελία δεν προσμετράται στον τζίρο.')
+                    ->visible(fn (Order $record) => ! in_array(
+                        $record->status,
+                        [OrderStatus::Completed, OrderStatus::Cancelled],
+                        true,
+                    ))
+                    ->action(function (Order $record) {
+                        try {
+                            app(CancelOrder::class)->execute($record);
+                            Notification::make()->title('Η παραγγελία ακυρώθηκε')->success()->send();
+                        } catch (ValidationException $e) {
+                            Notification::make()->title($e->validator->errors()->first())->danger()->send();
                         }
                     }),
             ]);

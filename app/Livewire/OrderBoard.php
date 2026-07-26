@@ -2,9 +2,11 @@
 
 namespace App\Livewire;
 
+use App\Actions\CancelOrder;
 use App\Actions\TransitionOrderStatus;
 use App\Enums\OrderStatus;
 use App\Models\Order;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -17,10 +19,43 @@ class OrderBoard extends Component
         $this->lastSeenOrderId = (int) Order::max('id');
     }
 
-    public function advance(int $orderId): void
+    /**
+     * $expectedStatus is what this board was showing when the button was drawn;
+     * if the order moved on meanwhile the tap is refused instead of skipping a step.
+     */
+    public function advance(int $orderId, string $expectedStatus): void
     {
-        $order = Order::findOrFail($orderId);
-        app(TransitionOrderStatus::class)->execute($order);
+        $order = Order::find($orderId);
+        $expected = OrderStatus::tryFrom($expectedStatus);
+
+        if (! $order || ! $expected) {
+            $this->addError('board', 'Η παραγγελία δεν βρέθηκε. Ο πίνακας ανανεώθηκε.');
+
+            return;
+        }
+
+        try {
+            app(TransitionOrderStatus::class)->execute($order, $expected);
+        } catch (ValidationException $e) {
+            $this->addError('board', $e->validator->errors()->first());
+        }
+    }
+
+    public function cancel(int $orderId): void
+    {
+        $order = Order::find($orderId);
+
+        if (! $order) {
+            $this->addError('board', 'Η παραγγελία δεν βρέθηκε. Ο πίνακας ανανεώθηκε.');
+
+            return;
+        }
+
+        try {
+            app(CancelOrder::class)->execute($order);
+        } catch (ValidationException $e) {
+            $this->addError('board', $e->validator->errors()->first());
+        }
     }
 
     public function acknowledge(int $newMaxId): void
