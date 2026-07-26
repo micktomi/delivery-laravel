@@ -37,6 +37,21 @@ class ProductResource extends Resource
                 ->label('Περιγραφή')
                 ->nullable()
                 ->rows(2),
+            // Resizing happens in the browser, so an 8 MB phone photo is a
+            // ~800px square before it is ever uploaded. cover + equal target
+            // dimensions is what actually forces 1:1; the editor alone does not.
+            Forms\Components\FileUpload::make('image')
+                ->label('Φωτογραφία')
+                ->helperText('Προαιρετικό — χωρίς φωτογραφία μπαίνει η προεπιλεγμένη εικόνα.')
+                ->image()
+                ->disk('public')
+                ->directory('products')
+                ->imageEditor()
+                ->imageEditorAspectRatios(['1:1'])
+                ->imageResizeMode('cover')
+                ->imageResizeTargetWidth(800)
+                ->imageResizeTargetHeight(800)
+                ->maxSize(8192),
             Forms\Components\TextInput::make('base_price')
                 ->label('Βασική Τιμή (€)')
                 ->numeric()
@@ -57,6 +72,10 @@ class ProductResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('sort_order')->label('#')->sortable(),
+                Tables\Columns\ImageColumn::make('image')
+                    ->label('Εικόνα')
+                    ->disk('public')
+                    ->square(),
                 Tables\Columns\TextColumn::make('category.name')->label('Κατηγορία')->sortable(),
                 Tables\Columns\TextColumn::make('name')->label('Όνομα')->searchable(),
                 Tables\Columns\TextColumn::make('base_price')->label('Τιμή')->money('EUR')->sortable(),
