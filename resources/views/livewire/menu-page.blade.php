@@ -30,77 +30,97 @@
     x-data="menu(@js($categories->first()?->slug ?? ''))"
     x-init="initScrollSpy()"
     x-on:cart-updated.window="syncCart($event.detail)"
-    class="min-h-screen bg-gray-50 overflow-x-clip"
+    x-on:scroll.window="onScroll()"
+    class="min-h-screen bg-white overflow-x-clip"
 >
 
-{{-- ══ HERO ══ --}}
+{{-- ══ HERO ══
+     No photo. This is a takeaway menu: vertical space above the first product
+     is time-to-order. The brand sits here once and collapses into the pill bar
+     on scroll. --}}
 <section class="hero-gradient text-white">
-    <div class="max-w-6xl mx-auto px-5 sm:px-8 py-10 sm:py-14">
-        <h1 class="text-3xl sm:text-4xl font-black tracking-tight">{{ config('app.name') }}</h1>
-        <p class="mt-2 text-base sm:text-lg font-semibold text-white/90">Καφές • Sandwich • Αναψυκτικά</p>
-        <p class="mt-1 text-sm text-white/70">Γρήγορη παραγγελία για delivery / take away</p>
+    <div class="mx-auto max-w-7xl px-4 pb-8 pt-7 lg:px-8 lg:pb-11 lg:pt-10">
+        <h1 class="font-display text-[1.7rem] font-extrabold leading-none tracking-tight lg:text-[2.6rem]">
+            {{ config('app.name') }}
+        </h1>
+        <p class="mt-2 text-[13px] font-medium text-white/70 lg:text-[15px]">
+            Καφές · Sandwich · Αναψυκτικά — delivery &amp; take away
+        </p>
+
+        @if($latestTrackableOrderToken)
+            <a
+                href="{{ route('order.track', $latestTrackableOrderToken) }}"
+                class="mt-5 flex max-w-md items-center justify-between rounded-xl bg-white/10 px-3.5 py-2.5 ring-1 ring-white/15 transition hover:bg-white/15"
+            >
+                <span class="text-[13px] font-medium">Έχεις μια ενεργή παραγγελία</span>
+                <span class="text-[13px] font-semibold text-white/80">Παρακολούθηση παραγγελίας →</span>
+            </a>
+        @endif
     </div>
 </section>
 
-{{-- ══ MAIN SHELL: content column + desktop cart sidebar ══ --}}
-<div class="max-w-6xl mx-auto lg:flex lg:items-start lg:gap-8 lg:px-8">
+{{-- ══ STICKY CATEGORY BAR ══
+     Full width, outside the content column: it spans the page like the hero
+     above it, rather than stopping at the edge of the menu column.
 
-    <div class="lg:flex-1 min-w-0">
+     Wraps on desktop instead of overflowing — the café adds categories from
+     Filament, and a single row breaks silently at eight of them. --}}
+<header
+    x-bind:class="stickyHeaderClass()"
+    class="sticky top-0 z-30 border-b border-[var(--hairline)] bg-white/95 backdrop-blur"
+>
+    <div class="mx-auto max-w-7xl px-4 lg:px-8">
+        <div class="flex items-center gap-2 py-3">
+                {{-- Collapsed brand mark, only once the hero has scrolled away. --}}
+                <span
+                    x-cloak
+                    x-show="scrolled"
+                    class="font-display mr-1 hidden shrink-0 self-center text-sm font-extrabold tracking-tight lg:block"
+                >{{ config('app.name') }}</span>
 
-        {{-- ── STICKY HEADER: category pills + mobile cart icon ── --}}
-        <header class="sticky top-0 z-30 bg-white shadow-sm">
-            <div class="flex items-center justify-between px-4 py-2.5 lg:hidden">
-                <span class="text-sm font-black tracking-tight text-gray-900">☕ {{ config('app.name') }}</span>
+                <nav class="scrollbar-hide flex min-w-0 flex-1 gap-2 overflow-x-auto lg:flex-wrap lg:overflow-visible"
+                     style="scroll-snap-type: x mandatory;">
+                    @foreach($categories as $category)
+                        <a
+                            href="#cat-{{ $category->slug }}"
+                            data-pill="{{ $category->slug }}"
+                            x-bind:class="pillClass(@js($category->slug))"
+                            x-on:click.prevent="scrollToCategory(@js($category->slug))"
+                            class="shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-[13px] font-semibold transition-colors"
+                            style="scroll-snap-align: start;"
+                        >{{ $category->name }}</a>
+                    @endforeach
+                </nav>
+
                 {{-- Cart icon (mobile backup access) --}}
                 @if($cart)
-                    <button type="button" x-on:click="openCart()" class="relative p-2">
-                        <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button type="button" x-on:click="openCart()" class="relative shrink-0 p-2 lg:hidden">
+                        <svg class="size-6 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13l-1.4 7h12.8"/>
                         </svg>
-                        <span class="price absolute -top-1 -right-1 bg-amber-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center leading-none">{{ $cartCount }}</span>
+                        <span class="price absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full text-xs font-bold leading-none text-white" style="background: var(--accent)">{{ $cartCount }}</span>
                     </button>
                 @endif
             </div>
+    </div>
+</header>
 
-            @if($latestTrackableOrderToken)
-                <div class="flex justify-center px-4 pt-2 sm:justify-end">
-                    <a
-                        href="{{ route('order.track', $latestTrackableOrderToken) }}"
-                        class="inline-flex items-center rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-800 transition hover:bg-amber-200"
-                    >
-                        Παρακολούθηση παραγγελίας
-                    </a>
-                </div>
-            @endif
+{{-- ══ MAIN SHELL: content column + desktop cart sidebar ══ --}}
+<div class="mx-auto max-w-7xl px-4 lg:flex lg:items-start lg:gap-10 lg:px-8">
 
-            {{-- Category pills (scroll-spy highlight) --}}
-            <nav class="flex gap-2 px-4 py-3 lg:py-4 overflow-x-auto scrollbar-hide lg:justify-center"
-                style="scroll-snap-type: x mandatory;">
-                @foreach($categories as $category)
-                    <a
-                        href="#cat-{{ $category->slug }}"
-                        data-pill="{{ $category->slug }}"
-                        x-bind:class="activeSlug === '{{ $category->slug }}'
-                            ? 'bg-amber-500 text-white'
-                            : 'bg-gray-100 text-gray-700'"
-                        class="whitespace-nowrap px-4 py-2 rounded-full text-sm font-semibold transition-colors shrink-0"
-                        style="scroll-snap-align: start;"
-                        x-on:click.prevent="
-                            document.getElementById('cat-{{ $category->slug }}').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        "
-                    >{{ $category->name }}</a>
-                @endforeach
-            </nav>
-        </header>
+    <div class="lg:flex-1 min-w-0">
 
-        {{-- ── PRODUCT GRID ── --}}
-        <main class="px-4 lg:px-0 py-6 space-y-10 pb-36 lg:pb-12">
+        {{-- ── PRODUCT LIST / GRID ── --}}
+        <main class="py-6 space-y-10 pb-36 lg:pb-12">
             @foreach($categories as $category)
-                <section id="cat-{{ $category->slug }}" data-slug="{{ $category->slug }}">
-                    <h2 class="text-base font-bold text-gray-500 uppercase tracking-wider mb-3 px-1">
-                        {{ $category->name }}
-                    </h2>
+                <section id="cat-{{ $category->slug }}" data-slug="{{ $category->slug }}" class="scroll-mt-16">
+                    <div class="mb-3 flex items-baseline gap-2.5 px-1">
+                        <h2 class="font-display text-[17px] font-extrabold tracking-tight lg:text-xl">
+                            {{ $category->name }}
+                        </h2>
+                        <span class="price text-[12px] font-medium text-[var(--muted)]">{{ $category->products->count() }}</span>
+                    </div>
                     {{-- A category earns the image grid only once every one of its
                          products has a photo; otherwise the text list, which is the
                          default presentation and not a degraded card. --}}
@@ -123,10 +143,15 @@
     </div>
 
     {{-- ══ DESKTOP CART SIDEBAR ══ --}}
-    <aside class="hidden lg:block lg:w-[360px] lg:sticky lg:top-24 shrink-0">
-        <div class="bg-white rounded-2xl shadow-sm flex flex-col" style="max-height: calc(100vh - 7rem);">
-            <div class="px-5 py-4 border-b shrink-0">
-                <h2 class="font-black text-lg">Η παραγγελία σου</h2>
+    {{-- top-[72px] clears the sticky category bar; pt-6 lines the card up with
+         the first category heading. --}}
+    <aside class="hidden shrink-0 lg:sticky lg:top-[72px] lg:block lg:w-[330px] lg:pt-6">
+        <div class="flex flex-col overflow-hidden rounded-2xl border border-[var(--hairline)]" style="max-height: calc(100vh - 6.5rem);">
+            <div class="flex shrink-0 items-baseline justify-between border-b border-[var(--hairline)] px-4 py-3.5">
+                <h2 class="font-display text-[15px] font-extrabold tracking-tight">Η παραγγελία σου</h2>
+                @if($cart)
+                    <span class="price text-[12px] font-medium text-[var(--muted)]">{{ $cartCountLabel }}</span>
+                @endif
             </div>
 
             <div class="flex-1 overflow-y-auto px-4 py-2">
@@ -139,21 +164,24 @@
                         'compact' => true,
                     ])
                 @empty
-                    <p class="text-center text-gray-400 py-10 text-sm">Το καλάθι είναι άδειο</p>
+                    <div class="px-4 py-10 text-center">
+                        <p class="text-[13.5px] font-semibold">Άδειο καλάθι</p>
+                        <p class="mt-1 text-[12px] leading-relaxed text-[var(--ink-soft)]">Διάλεξε κάτι από το μενού και θα εμφανιστεί εδώ.</p>
+                    </div>
                 @endforelse
             </div>
 
             @if($cart)
-            <div class="px-5 pt-3 pb-5 border-t shrink-0">
-                <div class="flex justify-between items-baseline mb-3">
-                    <span class="text-gray-500 text-sm">{{ $cartCountLabel }}</span>
-                    <span class="price font-black text-xl" style="color: var(--accent)">{{ number_format($cartSubtotal, 2, ',', '.') }} €</span>
+            <div class="shrink-0 border-t border-[var(--hairline)] bg-[var(--sunken)] px-4 py-4">
+                <div class="mb-3 flex items-baseline justify-between">
+                    <span class="text-[13px] font-medium text-[var(--ink-soft)]">Σύνολο</span>
+                    <span class="price font-display text-xl font-extrabold" style="color: var(--accent)">{{ number_format($cartSubtotal, 2, ',', '.') }} €</span>
                 </div>
                 <a
                     href="/checkout"
-                    class="block w-full py-3.5 text-white text-center font-black text-base rounded-2xl shadow-lg active:scale-95 transition"
+                    class="block w-full rounded-xl px-4 py-3 text-center text-[14px] font-semibold text-white transition active:scale-95"
                     style="background: var(--accent);"
-                >Συνέχεια</a>
+                >Ολοκλήρωση</a>
             </div>
             @endif
         </div>
@@ -169,17 +197,12 @@
     <button
         type="button"
         x-on:click="openCart()"
-        class="w-full flex items-center justify-between text-white font-bold rounded-2xl px-5 py-4 shadow-2xl active:scale-95 transition"
+        class="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-white shadow-2xl transition active:scale-95"
         style="background: var(--accent);"
     >
-        <span class="flex items-center gap-2">
-            🛒
-            <span>{{ $cartCountLabel }}</span>
-        </span>
-        <span class="flex items-center gap-3">
-            <span class="price text-lg">{{ number_format($cartSubtotal, 2, ',', '.') }} €</span>
-            <span class="opacity-80 text-sm">Συνέχεια →</span>
-        </span>
+        <span class="price grid size-7 shrink-0 place-items-center rounded-lg bg-white/20 text-[13px] font-bold">{{ $cartCount }}</span>
+        <span class="text-[14px] font-semibold">Ολοκλήρωση</span>
+        <span class="price font-display ml-auto text-[15px] font-extrabold">{{ number_format($cartSubtotal, 2, ',', '.') }} €</span>
     </button>
 </div>
 @endif
@@ -218,9 +241,9 @@
     </div>
 
     {{-- Title row --}}
-    <div class="flex items-center justify-between px-5 py-3 border-b shrink-0">
-        <h2 class="font-black text-lg">Το καλάθι σου</h2>
-        <button type="button" x-on:click="closeCart()" class="text-gray-400 text-3xl leading-none">&times;</button>
+    <div class="flex shrink-0 items-center justify-between border-b border-[var(--hairline)] px-5 py-3.5">
+        <h2 class="font-display text-base font-extrabold tracking-tight">Η παραγγελία σου</h2>
+        <button type="button" x-on:click="closeCart()" class="text-[13px] font-medium text-[var(--ink-soft)]">Κλείσιμο</button>
     </div>
 
     {{-- Items --}}
@@ -231,25 +254,27 @@
                 'index' => $index,
                 'key' => $cartLineKeys[$index],
                 'scope' => 'mobile',
-                'deletable' => true,
             ])
         @empty
-            <p class="text-center text-gray-400 py-12 text-base">Το καλάθι είναι άδειο</p>
+            <div class="px-4 py-12 text-center">
+                <p class="text-sm font-semibold">Άδειο καλάθι</p>
+                <p class="mt-1 text-[13px] leading-relaxed text-[var(--ink-soft)]">Διάλεξε κάτι από το μενού και θα εμφανιστεί εδώ.</p>
+            </div>
         @endforelse
     </div>
 
     {{-- Footer: subtotal + CTA --}}
     @if($cart)
-    <div class="px-4 pt-3 pb-4 border-t bg-white shrink-0">
-        <div class="flex justify-between items-baseline mb-3">
-            <span class="text-gray-500 text-base">Υποσύνολο</span>
-            <span class="price font-black text-xl" style="color: var(--accent)">{{ number_format($cartSubtotal, 2, ',', '.') }} €</span>
+    <div class="shrink-0 border-t border-[var(--hairline)] bg-[var(--sunken)] px-4 pb-4 pt-4">
+        <div class="mb-3 flex items-baseline justify-between">
+            <span class="text-sm font-medium text-[var(--ink-soft)]">Σύνολο</span>
+            <span class="price font-display text-2xl font-extrabold" style="color: var(--accent)">{{ number_format($cartSubtotal, 2, ',', '.') }} €</span>
         </div>
         <a
             href="/checkout"
-            class="block w-full py-4 text-white text-center font-black text-lg rounded-2xl shadow-lg active:scale-95 transition"
+            class="block w-full rounded-xl px-4 py-3.5 text-center text-[15px] font-semibold text-white transition active:scale-95"
             style="background: var(--accent);"
-        >Συνέχεια →</a>
+        >Ολοκλήρωση παραγγελίας</a>
     </div>
     @endif
 </div>

@@ -80,6 +80,28 @@ document.addEventListener('livewire:init', () => {
             return this.activeSlug === slug;
         },
 
+        stickyHeaderClass() {
+            return this.scrolled ? 'shadow-sm' : '';
+        },
+
+        pillClass(slug) {
+            if (this.isActiveCategory(slug)) {
+                return 'bg-[var(--accent)] text-white';
+            }
+
+            return 'text-[var(--ink-soft)] hover:bg-[var(--accent-light)] hover:text-[var(--accent-text)]';
+        },
+
+        scrollToCategory(slug) {
+            const section = document.getElementById('cat-' + slug);
+
+            if (! section) {
+                return;
+            }
+
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        },
+
         /* scrollIntoView() walked up to the window on the vertical axis and
            snapped the page back toward the header, because the hero means the
            pill nav is not already at y=0. Scroll the nav itself instead. */

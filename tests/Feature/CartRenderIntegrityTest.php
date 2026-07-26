@@ -86,7 +86,7 @@ class CartRenderIntegrityTest extends TestCase
 
         $html = $component->html();
         $this->assertSame([], $this->keys($html, 'desktop'));
-        $this->assertStringContainsString('Το καλάθι είναι άδειο', $html);
+        $this->assertStringContainsString('Άδειο καλάθι', $html);
     }
 
     public function test_a_quantity_change_keeps_the_same_key(): void
