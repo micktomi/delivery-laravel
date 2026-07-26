@@ -27,11 +27,22 @@ class Category extends Model
      * A category earns the image layout only when every one of its products has
      * an image. One product short and the whole category stays on the text
      * list, so a half-illustrated grid can never happen.
+     *
+     * Reads only an already eager-loaded relation: answering this per category
+     * mid-render would otherwise fire a query each time. Unloaded means unknown,
+     * and unknown falls back to the text list, which is the default anyway.
+     * Deliberately kept out of $appends so it never serialises.
      */
     protected function usesImages(): Attribute
     {
-        return Attribute::get(fn (): bool => $this->products->isNotEmpty()
-            && $this->products->every(fn (Product $product) => filled($product->image)));
+        return Attribute::get(function (): bool {
+            if (! $this->relationLoaded('products')) {
+                return false;
+            }
+
+            return $this->products->isNotEmpty()
+                && $this->products->every(fn (Product $product) => filled($product->image));
+        });
     }
 
     public function optionGroups(): BelongsToMany

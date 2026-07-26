@@ -1,40 +1,8 @@
 @php use App\Enums\SelectionType; @endphp
 <div
-    x-data="{
-        cartOpen:    false,
-        activeSlug:  '{{ $categories->first()?->slug ?? '' }}',
-        addedProductId: null,
-        cart: @js($cart),
-
-        get cartCount()  { return this.cart.reduce((s, i) => s + i.quantity, 0); },
-        get subtotal()   { return this.cart.reduce((s, i) => s + parseFloat(i.line_total), 0); },
-
-        /* ── scroll-spy ── */
-        initScrollSpy() {
-            const obs = new IntersectionObserver(entries => {
-                entries.forEach(e => {
-                    if (e.isIntersecting) {
-                        this.activeSlug = e.target.dataset.slug;
-                        /* scroll the matching pill into view — horizontally, inside the pill nav only.
-                           (scrollIntoView() was walking up to the window for the vertical axis and
-                           snapping the whole page back toward the header, since the hero above it
-                           means the header isn't already at y=0.) */
-                        const pill = document.querySelector(`[data-pill='${this.activeSlug}']`);
-                        if (pill) {
-                            const nav = pill.parentElement;
-                            nav.scrollTo({
-                                left: pill.offsetLeft - (nav.clientWidth - pill.clientWidth) / 2,
-                                behavior: 'smooth',
-                            });
-                        }
-                    }
-                });
-            }, { rootMargin: '-96px 0px -55% 0px', threshold: 0 });
-            document.querySelectorAll('[data-slug]').forEach(el => obs.observe(el));
-        }
-    }"
+    x-data="menu(@js($cart), @js($categories->first()?->slug ?? ''))"
     x-init="initScrollSpy()"
-    x-on:cart-updated.window="cart = $event.detail.cart || []; addedProductId = $event.detail.productId ?? null; cartOpen = true"
+    x-on:cart-updated.window="syncCart($event.detail)"
     class="min-h-screen bg-gray-50 overflow-x-clip"
 >
 

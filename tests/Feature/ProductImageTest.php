@@ -53,6 +53,22 @@ class ProductImageTest extends TestCase
         $this->assertFalse($category->load('products')->uses_images);
     }
 
+    public function test_it_never_lazy_loads_products_to_answer(): void
+    {
+        $category = $this->category('Καφέδες');
+        $this->product('Espresso', 'products/one.jpg', $category);
+
+        $fresh = Category::query()->findOrFail($category->id);
+
+        $queries = 0;
+        \DB::listen(function () use (&$queries) {
+            $queries++;
+        });
+
+        $this->assertFalse($fresh->uses_images);
+        $this->assertSame(0, $queries, 'Reading uses_images lazy-loaded the products relation.');
+    }
+
     private function category(string $name): Category
     {
         return Category::create([
