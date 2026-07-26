@@ -7,43 +7,12 @@
  * which keeps expression errors inside a file that can be read and diffed.
  */
 document.addEventListener('livewire:init', () => {
-    window.Alpine.data('menu', (initialCart = [], initialSlug = '') => ({
-        cart: initialCart,
+    window.Alpine.data('menu', (initialSlug = '') => ({
         activeSlug: initialSlug,
         cartOpen: false,
         scrolled: false,
         addedProductId: null,
         addedTimer: null,
-
-        get cartCount() {
-            return this.cart.reduce((total, item) => total + item.quantity, 0);
-        },
-
-        get subtotal() {
-            return this.cart.reduce((total, item) => total + parseFloat(item.line_total), 0);
-        },
-
-        get isEmpty() {
-            return this.cart.length === 0;
-        },
-
-        /* ── formatting ── */
-
-        eur(value) {
-            return value.toFixed(2).replace('.', ',') + ' €';
-        },
-
-        lineTotal(item) {
-            return this.eur(parseFloat(item.line_total));
-        },
-
-        itemCountLabel() {
-            return this.cartCount + ' ' + (this.cartCount === 1 ? 'προϊόν' : 'προϊόντα');
-        },
-
-        optionSummary(item) {
-            return item.selected_options.map((option) => option.value).join(' · ');
-        },
 
         /* ── "added to cart" confirmation ──
            Driven by the server's cart-updated event, so it confirms a real
@@ -57,6 +26,17 @@ document.addEventListener('livewire:init', () => {
 
         notAdded(id) {
             return this.addedProductId !== id;
+        },
+
+        /* Returned as a class string rather than bound with a ternary, so the
+           markup attribute stays a bare call. Both branches are literal here
+           so Tailwind still sees the utilities when it scans this file. */
+        addButtonClass(id) {
+            if (this.isAdded(id)) {
+                return 'bg-emerald-600 text-white';
+            }
+
+            return 'bg-[var(--accent)] text-white group-hover:bg-[var(--accent-hover)]';
         },
 
         flagAdded(id) {
@@ -73,35 +53,13 @@ document.addEventListener('livewire:init', () => {
         },
 
         /* ── cart ──
-           The server owns the cart; this mirror exists so a tap feels
-           instant. Every mutation still goes through the Livewire action,
-           and syncCart overwrites the mirror with whatever came back. */
+           Livewire renders the cart rows from the same array the server owns;
+           nothing here mirrors them. Alpine only reacts to the event: flag the
+           product that was just added, and reveal the sheet. */
 
         syncCart(detail) {
-            this.cart = detail.cart || [];
             this.flagAdded(detail.productId ?? null);
             this.cartOpen = true;
-        },
-
-        increment(index) {
-            this.cart[index].quantity++;
-            this.$wire.updateQty(index, this.cart[index].quantity);
-        },
-
-        decrement(index) {
-            if (this.cart[index].quantity > 1) {
-                this.cart[index].quantity--;
-                this.$wire.updateQty(index, this.cart[index].quantity);
-
-                return;
-            }
-
-            this.removeLine(index);
-        },
-
-        removeLine(index) {
-            this.cart.splice(index, 1);
-            this.$wire.removeFromCart(index);
         },
 
         openCart() {

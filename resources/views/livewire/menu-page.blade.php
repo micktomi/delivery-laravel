@@ -1,6 +1,33 @@
-@php use App\Enums\SelectionType; @endphp
+@php
+    use App\Enums\SelectionType;
+
+    /**
+     * Stable identity per cart line, so Livewire morphs a line in place instead
+     * of matching by position. Quantity is deliberately excluded: changing it
+     * must update the same row, not mint a new one. Two lines can legitimately
+     * be identical (add the same product twice), so an occurrence counter keeps
+     * the keys unique without falling back to the array index.
+     */
+    $cartLineKeys = [];
+    $cartLineSeen = [];
+
+    foreach ($cart as $cartIndex => $cartLine) {
+        $signature = md5(json_encode([
+            $cartLine['product_id'] ?? null,
+            array_column($cartLine['selected_options'] ?? [], 'option_value_id'),
+            $cartLine['notes'] ?? '',
+        ]));
+
+        $cartLineSeen[$signature] = ($cartLineSeen[$signature] ?? 0) + 1;
+        $cartLineKeys[$cartIndex] = $signature.'-'.$cartLineSeen[$signature];
+    }
+
+    $cartCount = array_sum(array_column($cart, 'quantity'));
+    $cartSubtotal = array_sum(array_map(fn ($line) => (float) $line['line_total'], $cart));
+    $cartCountLabel = $cartCount.' '.($cartCount === 1 ? 'προϊόν' : 'προϊόντα');
+@endphp
 <div
-    x-data="menu(@js($cart), @js($categories->first()?->slug ?? ''))"
+    x-data="menu(@js($categories->first()?->slug ?? ''))"
     x-init="initScrollSpy()"
     x-on:cart-updated.window="syncCart($event.detail)"
     class="min-h-screen bg-gray-50 overflow-x-clip"
@@ -25,20 +52,15 @@
             <div class="flex items-center justify-between px-4 py-2.5 lg:hidden">
                 <span class="text-sm font-black tracking-tight text-gray-900">☕ {{ config('app.name') }}</span>
                 {{-- Cart icon (mobile backup access) --}}
-                <button
-                    x-show="cartCount > 0"
-                    x-on:click="cartOpen = true"
-                    class="relative p-2"
-                    x-cloak
-                >
-                    <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13l-1.4 7h12.8"/>
-                    </svg>
-                    <span x-text="cartCount"
-                        class="absolute -top-1 -right-1 bg-amber-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center leading-none">
-                    </span>
-                </button>
+                @if($cart)
+                    <button type="button" x-on:click="openCart()" class="relative p-2">
+                        <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13l-1.4 7h12.8"/>
+                        </svg>
+                        <span class="price absolute -top-1 -right-1 bg-amber-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center leading-none">{{ $cartCount }}</span>
+                    </button>
+                @endif
             </div>
 
             @if($latestTrackableOrderToken)
@@ -79,51 +101,22 @@
                     <h2 class="text-base font-bold text-gray-500 uppercase tracking-wider mb-3 px-1">
                         {{ $category->name }}
                     </h2>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3">
-                        @foreach($category->products as $product)
-                            @php $available = $product->is_available; @endphp
-                            <div
-                                class="bg-white rounded-2xl shadow-sm p-4 flex flex-col transition hover:shadow-md
-                                    {{ !$available ? 'opacity-50' : '' }}"
-                                @if($available)
-                                    @if($product->optionGroups->isNotEmpty())
-                                        wire:click="openProduct({{ $product->id }})"
-                                    @else
-                                        wire:click="addDirectly({{ $product->id }})"
-                                    @endif
-                                @endif
-                                {{ $available ? 'role=button' : '' }}
-                            >
-                                <div class="font-semibold text-gray-900 text-base leading-snug">{{ $product->name }}</div>
-                                @if($product->description)
-                                    <div class="text-sm text-gray-400 mt-0.5">{{ $product->description }}</div>
-                                @endif
-
-                                <div class="mt-3 flex items-center justify-between">
-                                    <span class="font-bold text-lg" style="color: var(--accent)">
-                                        {{ number_format($product->base_price, 2) }}€
-                                    </span>
-                                    @if($available)
-                                        <span
-                                            x-show="addedProductId !== {{ $product->id }}"
-                                            class="w-10 h-10 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow shrink-0"
-                                            style="background: var(--accent)">
-                                            +
-                                        </span>
-                                        <span
-                                            x-show="addedProductId === {{ $product->id }}"
-                                            x-cloak
-                                            x-on:animationend="addedProductId = null"
-                                            class="added-to-cart-feedback h-10 rounded-full flex items-center justify-center px-3 text-sm font-bold text-white shadow shrink-0"
-                                            style="background: var(--accent)"
-                                        >✓ Προστέθηκε</span>
-                                    @else
-                                        <span class="text-xs text-gray-400 font-medium whitespace-nowrap">Εξαντλήθηκε</span>
-                                    @endif
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
+                    {{-- A category earns the image grid only once every one of its
+                         products has a photo; otherwise the text list, which is the
+                         default presentation and not a degraded card. --}}
+                    @if($category->uses_images)
+                        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-4 xl:grid-cols-4">
+                            @foreach($category->products as $product)
+                                @include('livewire.partials.product-card', ['product' => $product])
+                            @endforeach
+                        </div>
+                    @else
+                        <ul class="sm:grid sm:grid-cols-2 sm:gap-x-8">
+                            @foreach($category->products as $product)
+                                @include('livewire.partials.product-row', ['product' => $product])
+                            @endforeach
+                        </ul>
+                    @endif
                 </section>
             @endforeach
         </main>
@@ -137,49 +130,24 @@
             </div>
 
             <div class="flex-1 overflow-y-auto px-4 py-2">
-                <template x-if="cart.length === 0">
+                @forelse($cart as $index => $line)
+                    @include('livewire.partials.cart-line', [
+                        'line' => $line,
+                        'index' => $index,
+                        'key' => $cartLineKeys[$index],
+                        'scope' => 'desktop',
+                        'compact' => true,
+                    ])
+                @empty
                     <p class="text-center text-gray-400 py-10 text-sm">Το καλάθι είναι άδειο</p>
-                </template>
-                <template x-for="(item, idx) in cart" :key="idx">
-                    <div class="flex items-start gap-3 py-3 border-b border-gray-100 last:border-0">
-                        <div class="flex-1 min-w-0">
-                            <div class="font-semibold text-sm leading-snug" x-text="item.product_name"></div>
-                            <template x-if="item.selected_options && item.selected_options.length">
-                                <div class="text-xs text-gray-400 mt-0.5 leading-snug"
-                                    x-text="item.selected_options.map(o => o.value).join(' · ')">
-                                </div>
-                            </template>
-                            <div class="font-bold text-sm mt-1" style="color: var(--accent)"
-                                x-text="parseFloat(item.line_total).toFixed(2) + '€'">
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-1 shrink-0 mt-0.5">
-                            <button
-                                class="w-7 h-7 rounded-full border-2 border-gray-200 flex items-center justify-center text-sm font-bold active:scale-90 transition"
-                                x-on:click="
-                                    if (item.quantity > 1) {
-                                        item.quantity--;
-                                        $wire.updateQty(idx, item.quantity);
-                                    } else {
-                                        cart.splice(idx, 1);
-                                        $wire.removeFromCart(idx);
-                                    }
-                                "
-                            >−</button>
-                            <span class="w-6 text-center font-bold text-sm" x-text="item.quantity"></span>
-                            <button
-                                class="w-7 h-7 rounded-full border-2 border-gray-200 flex items-center justify-center text-sm font-bold active:scale-90 transition"
-                                x-on:click="item.quantity++; $wire.updateQty(idx, item.quantity);"
-                            >+</button>
-                        </div>
-                    </div>
-                </template>
+                @endforelse
             </div>
 
-            <div class="px-5 pt-3 pb-5 border-t shrink-0" x-show="cart.length > 0">
+            @if($cart)
+            <div class="px-5 pt-3 pb-5 border-t shrink-0">
                 <div class="flex justify-between items-baseline mb-3">
-                    <span class="text-gray-500 text-sm" x-text="cartCount + ' ' + (cartCount === 1 ? 'προϊόν' : 'προϊόντα')"></span>
-                    <span class="font-black text-xl" style="color: var(--accent)" x-text="subtotal.toFixed(2) + '€'"></span>
+                    <span class="text-gray-500 text-sm">{{ $cartCountLabel }}</span>
+                    <span class="price font-black text-xl" style="color: var(--accent)">{{ number_format($cartSubtotal, 2, ',', '.') }} €</span>
                 </div>
                 <a
                     href="/checkout"
@@ -187,32 +155,34 @@
                     style="background: var(--accent);"
                 >Συνέχεια</a>
             </div>
+            @endif
         </div>
     </aside>
 </div>
 
 {{-- ══ MOBILE STICKY BOTTOM CART BAR ══ --}}
+@if($cart)
 <div
-    x-show="cartCount > 0"
-    x-cloak
     class="fixed bottom-0 left-0 right-0 z-40 px-4 pb-4 lg:hidden"
     style="padding-bottom: max(1rem, env(safe-area-inset-bottom));"
 >
     <button
-        x-on:click="cartOpen = true"
+        type="button"
+        x-on:click="openCart()"
         class="w-full flex items-center justify-between text-white font-bold rounded-2xl px-5 py-4 shadow-2xl active:scale-95 transition"
         style="background: var(--accent);"
     >
         <span class="flex items-center gap-2">
             🛒
-            <span x-text="cartCount + ' ' + (cartCount === 1 ? 'προϊόν' : 'προϊόντα')"></span>
+            <span>{{ $cartCountLabel }}</span>
         </span>
         <span class="flex items-center gap-3">
-            <span x-text="subtotal.toFixed(2) + '€'" class="text-lg"></span>
+            <span class="price text-lg">{{ number_format($cartSubtotal, 2, ',', '.') }} €</span>
             <span class="opacity-80 text-sm">Συνέχεια →</span>
         </span>
     </button>
 </div>
+@endif
 
 {{-- ══ MOBILE CART BOTTOM SHEET ══ --}}
 {{-- Backdrop --}}
@@ -225,7 +195,7 @@
     x-transition:leave-start="opacity-100"
     x-transition:leave-end="opacity-0"
     class="fixed inset-0 z-40 bg-black/50 lg:hidden"
-    x-on:click="cartOpen = false"
+    x-on:click="closeCart()"
     x-cloak
 ></div>
 
@@ -250,68 +220,30 @@
     {{-- Title row --}}
     <div class="flex items-center justify-between px-5 py-3 border-b shrink-0">
         <h2 class="font-black text-lg">Το καλάθι σου</h2>
-        <button x-on:click="cartOpen = false" class="text-gray-400 text-3xl leading-none">&times;</button>
+        <button type="button" x-on:click="closeCart()" class="text-gray-400 text-3xl leading-none">&times;</button>
     </div>
 
     {{-- Items --}}
     <div class="flex-1 overflow-y-auto px-4 py-2">
-        <template x-if="cart.length === 0">
+        @forelse($cart as $index => $line)
+            @include('livewire.partials.cart-line', [
+                'line' => $line,
+                'index' => $index,
+                'key' => $cartLineKeys[$index],
+                'scope' => 'mobile',
+                'deletable' => true,
+            ])
+        @empty
             <p class="text-center text-gray-400 py-12 text-base">Το καλάθι είναι άδειο</p>
-        </template>
-        <template x-for="(item, idx) in cart" :key="idx">
-            <div class="flex items-start gap-3 py-4 border-b border-gray-100 last:border-0">
-                <div class="flex-1 min-w-0">
-                    <div class="font-semibold text-base leading-snug" x-text="item.product_name"></div>
-                    <template x-if="item.selected_options && item.selected_options.length">
-                        <div class="text-sm text-gray-400 mt-0.5 leading-snug"
-                            x-text="item.selected_options.map(o => o.value).join(' · ')">
-                        </div>
-                    </template>
-                    <template x-if="item.notes">
-                        <div class="text-sm mt-0.5" style="color: var(--accent-text)" x-text="'📝 ' + item.notes"></div>
-                    </template>
-                    <div class="font-bold mt-1.5" style="color: var(--accent)"
-                        x-text="parseFloat(item.line_total).toFixed(2) + '€'">
-                    </div>
-                </div>
-                {{-- Qty stepper --}}
-                <div class="flex items-center gap-1 shrink-0 mt-1">
-                    <button
-                        class="w-8 h-8 rounded-full border-2 border-gray-200 flex items-center justify-center text-base font-bold active:scale-90 transition"
-                        x-on:click="
-                            if (item.quantity > 1) {
-                                item.quantity--;
-                                $wire.updateQty(idx, item.quantity);
-                            } else {
-                                cart.splice(idx, 1);
-                                $wire.removeFromCart(idx);
-                            }
-                        "
-                    >−</button>
-                    <span class="w-7 text-center font-bold text-base" x-text="item.quantity"></span>
-                    <button
-                        class="w-8 h-8 rounded-full border-2 border-gray-200 flex items-center justify-center text-base font-bold active:scale-90 transition"
-                        x-on:click="item.quantity++; $wire.updateQty(idx, item.quantity);"
-                    >+</button>
-                    <button
-                        class="ml-2 w-8 h-8 flex items-center justify-center text-gray-300 hover:text-red-400 transition"
-                        x-on:click="cart.splice(idx, 1); $wire.removeFromCart(idx);"
-                    >
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M4 7h16"/>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        </template>
+        @endforelse
     </div>
 
     {{-- Footer: subtotal + CTA --}}
-    <div class="px-4 pt-3 pb-4 border-t bg-white shrink-0" x-show="cart.length > 0">
+    @if($cart)
+    <div class="px-4 pt-3 pb-4 border-t bg-white shrink-0">
         <div class="flex justify-between items-baseline mb-3">
             <span class="text-gray-500 text-base">Υποσύνολο</span>
-            <span class="font-black text-xl" style="color: var(--accent)" x-text="subtotal.toFixed(2) + '€'"></span>
+            <span class="price font-black text-xl" style="color: var(--accent)">{{ number_format($cartSubtotal, 2, ',', '.') }} €</span>
         </div>
         <a
             href="/checkout"
@@ -319,6 +251,7 @@
             style="background: var(--accent);"
         >Συνέχεια →</a>
     </div>
+    @endif
 </div>
 
 {{-- ══ PRODUCT MODAL (bottom sheet on mobile, centered dialog on desktop) ══ --}}

@@ -67,16 +67,6 @@
     background: radial-gradient(120% 160% at 15% 0%, var(--accent) 0%, var(--accent-hover) 45%, var(--espresso) 100%);
 }
 
-/* Ends the confirmation after its visible CSS animation, without a JS timer. */
-.added-to-cart-feedback {
-    animation: added-to-cart-feedback 1.5s ease-out;
-}
-
-@keyframes added-to-cart-feedback {
-    0%, 80% { opacity: 1; transform: scale(1); }
-    100% { opacity: 0; transform: scale(.96); }
-}
-
 @theme {
     --font-display: 'Commissioner', system-ui, sans-serif;
     --font-sans: 'Inter', system-ui, sans-serif;
