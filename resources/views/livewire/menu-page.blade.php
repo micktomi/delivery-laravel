@@ -338,23 +338,30 @@
     <div class="absolute inset-0 bg-black/50" wire:click="closeModal"></div>
 
     {{-- Sheet --}}
-    <div class="relative z-10 flex w-full min-h-0 max-h-[calc(100dvh-env(safe-area-inset-top))] flex-col rounded-t-3xl bg-white lg:mx-4 lg:max-h-[88vh] lg:max-w-lg lg:rounded-3xl"
+    <div class="relative z-10 flex w-full min-h-0 max-h-[calc(100dvh-env(safe-area-inset-top))] flex-col rounded-t-3xl bg-white shadow-2xl lg:mx-4 lg:max-h-[88vh] lg:max-w-lg lg:rounded-3xl"
         style="padding-bottom: env(safe-area-inset-bottom);">
 
         {{-- Drag handle --}}
-        <div class="flex justify-center pt-3 pb-2 shrink-0 lg:hidden">
-            <div class="w-10 h-1 bg-gray-200 rounded-full"></div>
+        <div class="flex shrink-0 justify-center pb-2 pt-3 lg:hidden">
+            <div class="h-1 w-10 rounded-full bg-[var(--hairline)]"></div>
         </div>
 
         {{-- Product name + close --}}
-        <div class="flex items-start justify-between px-5 pb-3 border-b shrink-0">
-            <div>
-                <h3 class="font-black text-xl leading-tight">{{ $openProduct->name }}</h3>
-                <div class="text-base font-bold mt-0.5" style="color: var(--accent)">
-                    {{ number_format($openProduct->base_price, 2) }}€
-                </div>
+        <div class="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--hairline)] px-5 pb-3.5">
+            <div class="min-w-0">
+                <h3 class="font-display text-lg font-extrabold leading-tight tracking-tight">{{ $openProduct->name }}</h3>
+                <p class="price mt-0.5 text-sm font-bold" style="color: var(--accent)">
+                    {{ number_format($openProduct->base_price, 2, ',', '.') }} €
+                </p>
             </div>
-            <button wire:click="closeModal" class="text-gray-300 text-3xl leading-none ml-4 mt-1">&times;</button>
+            <button
+                type="button"
+                wire:click="closeModal"
+                aria-label="Κλείσιμο"
+                class="grid size-9 shrink-0 place-items-center rounded-lg border border-[var(--hairline)] text-[var(--ink-soft)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            >
+                <svg class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5l10 10M15 5L5 15"/></svg>
+            </button>
         </div>
 
         {{-- Scrollable options --}}
@@ -365,61 +372,69 @@
         >
             @foreach($openProduct->optionGroups as $group)
                 <div>
-                    <div class="flex items-center gap-2 mb-3">
-                        <span class="font-bold text-base text-gray-900">{{ $group->name }}</span>
+                    {{-- The limits are stated up front rather than left for the
+                         validation error to explain after the fact. --}}
+                    <div class="mb-2.5 flex items-baseline gap-2">
+                        <h4 class="font-display text-[15px] font-extrabold tracking-tight">{{ $group->name }}</h4>
                         @if($group->is_required)
-                            <span class="text-xs font-bold text-white bg-red-400 rounded-full px-2 py-0.5">Υποχρεωτικό</span>
+                            <span class="text-[10.5px] font-semibold uppercase tracking-wide text-[var(--ink-soft)]">Υποχρεωτικό</span>
                         @endif
                         @if($group->selection === SelectionType::Multi && ($group->min_select || $group->max_select))
-                            <span class="text-xs text-gray-400">
-                                @if($group->min_select) min {{ $group->min_select }} @endif
-                                @if($group->max_select) / max {{ $group->max_select }} @endif
+                            <span class="ml-auto shrink-0 text-[11.5px] font-medium text-[var(--muted)]">
+                                @if($group->min_select > 1)Τουλάχιστον {{ $group->min_select }}@endif
+                                @if($group->min_select > 1 && $group->max_select) · @endif
+                                @if($group->max_select)Έως {{ $group->max_select }}@endif
                             </span>
                         @endif
                     </div>
 
                     @if($group->selection === SelectionType::Single)
+                        {{-- Selected state is the same one the category pills
+                             use — accent border, accent-light fill, accent-text
+                             label — driven by peer-checked off a visually
+                             hidden but still real radio, so the surface is the
+                             indicator and assistive tech keeps a native
+                             control to announce. --}}
                         <div class="space-y-2">
                             @foreach($group->optionValues as $value)
-                                <label
-                                    class="flex items-center gap-4 px-4 py-3.5 rounded-xl border-2 cursor-pointer transition"
-                                    x-bind:class="selectedOptions[{{ $group->id }}] == {{ $value->id }}
-                                        ? 'border-amber-400 bg-amber-50'
-                                        : 'border-gray-100 bg-gray-50'"
-                                >
+                                <label class="block cursor-pointer">
                                     <input type="radio"
                                         name="g{{ $group->id }}"
                                         value="{{ $value->id }}"
                                         x-model="selectedOptions[{{ $group->id }}]"
-                                        class="w-5 h-5 accent-amber-500 shrink-0">
-                                    <span class="flex-1 font-medium text-base">{{ $value->name }}</span>
-                                    @if($value->price_delta > 0)
-                                        <span class="font-bold text-sm" style="color: var(--accent)">
-                                            +{{ number_format($value->price_delta, 2) }}€
-                                        </span>
-                                    @endif
+                                        class="peer sr-only">
+                                    <span class="flex items-center gap-3 rounded-2xl border border-[var(--hairline)] bg-white px-4 py-3 transition hover:border-[var(--accent)] peer-checked:border-[var(--accent)] peer-checked:bg-[var(--accent-light)] peer-checked:text-[var(--accent-text)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--accent)]">
+                                        <span class="flex-1 text-[14.5px] font-medium leading-snug">{{ $value->name }}</span>
+                                        @if($value->price_delta > 0)
+                                            <span class="price shrink-0 text-[13.5px] font-bold">
+                                                +{{ number_format($value->price_delta, 2, ',', '.') }} €
+                                            </span>
+                                        @endif
+                                    </span>
                                 </label>
                             @endforeach
                         </div>
                     @else
+                        {{-- Identical surface to the single-select above; only
+                             the input type differs. x-bind:checked sets the
+                             checked property, which is what :checked reflects,
+                             so peer-checked tracks Alpine's array without any
+                             class expression in the attribute. --}}
                         <div class="space-y-2">
                             @foreach($group->optionValues as $value)
-                                <label
-                                    class="flex items-center gap-4 px-4 py-3.5 rounded-xl border-2 cursor-pointer transition"
-                                    x-bind:class="(selectedOptions[{{ $group->id }}] || []).includes({{ $value->id }})
-                                        ? 'border-amber-400 bg-amber-50'
-                                        : 'border-gray-100 bg-gray-50'"
-                                >
+                                <label class="block cursor-pointer">
                                     <input type="checkbox"
                                         x-bind:checked="(selectedOptions[{{ $group->id }}] || []).includes({{ $value->id }})"
                                         x-on:change="toggleMulti({{ $group->id }}, {{ $value->id }})"
-                                        class="w-5 h-5 accent-amber-500 shrink-0 rounded">
-                                    <span class="flex-1 font-medium text-base">{{ $value->name }}</span>
-                                    @if($value->price_delta > 0)
-                                        <span class="font-bold text-sm" style="color: var(--accent)">
-                                            +{{ number_format($value->price_delta, 2) }}€
-                                        </span>
-                                    @endif
+                                        class="peer sr-only">
+                                    <span class="flex items-center gap-3 rounded-2xl border border-[var(--hairline)] bg-white px-4 py-3 transition hover:border-[var(--accent)] peer-checked:border-[var(--accent)] peer-checked:bg-[var(--accent-light)] peer-checked:text-[var(--accent-text)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--accent)]">
+                                        <span class="flex-1 text-[14.5px] font-medium leading-snug">{{ $value->name }}</span>
+                                        @if($value->price_delta > 0)
+                                            <span class="price shrink-0 text-[13.5px] font-bold">
+                                                +{{ number_format($value->price_delta, 2, ',', '.') }} €
+                                            </span>
+                                        @endif
+                                    </span>
                                 </label>
                             @endforeach
                         </div>
@@ -429,38 +444,50 @@
 
             {{-- Notes --}}
             <div>
-                <label class="block font-bold text-base text-gray-900 mb-2">Σημειώσεις</label>
+                <label for="item-notes" class="mb-2 block font-display text-[15px] font-extrabold tracking-tight">Σημειώσεις</label>
                 <input type="text"
+                    id="item-notes"
                     wire:model="itemNotes"
                     placeholder="π.χ. χωρίς ζάχαρη"
-                    class="w-full border-2 border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-amber-300">
+                    class="w-full rounded-xl border border-[var(--hairline)] bg-[var(--sunken)] px-4 py-3 text-[14.5px] transition placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:bg-white focus:outline-none">
             </div>
         </div>
 
-        {{-- Sticky footer: qty + add button --}}
-        <div class="shrink-0 px-5 pt-3 pb-4 border-t bg-white">
+        {{-- Sticky footer: qty + add button. The running total lives inside the
+             button so the customer never has to do the arithmetic before
+             committing to it. --}}
+        <div class="shrink-0 border-t border-[var(--hairline)] bg-[var(--sunken)] px-5 pb-4 pt-3.5">
             @error('options')
-                <p class="text-red-500 text-sm mb-2">{{ $message }}</p>
+                <p class="mb-2.5 rounded-lg bg-red-50 px-3 py-2 text-[12.5px] font-medium text-red-700">{{ $message }}</p>
             @enderror
 
-            <div class="flex items-center gap-4 mb-3">
+            <div class="flex items-center gap-3">
                 {{-- Qty --}}
-                <div class="flex items-center gap-3 bg-gray-100 rounded-xl px-3 py-2">
-                    <button x-on:click="if (quantity > 1) quantity--"
-                        class="w-8 h-8 flex items-center justify-center font-black text-xl active:scale-90 transition">−</button>
-                    <span class="w-6 text-center font-black text-lg" x-text="quantity"></span>
-                    <button x-on:click="quantity++"
-                        class="w-8 h-8 flex items-center justify-center font-black text-xl active:scale-90 transition">+</button>
+                <div class="flex shrink-0 items-center gap-1.5">
+                    <button type="button"
+                        x-on:click="if (quantity > 1) quantity--"
+                        aria-label="Μείωση ποσότητας"
+                        class="grid size-11 place-items-center rounded-xl border border-[var(--hairline)] bg-white text-[var(--ink-soft)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] active:scale-90">
+                        <svg class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 10h10"/></svg>
+                    </button>
+                    <span class="price w-7 text-center text-[15px] font-bold" x-text="quantity"></span>
+                    <button type="button"
+                        x-on:click="quantity++"
+                        aria-label="Αύξηση ποσότητας"
+                        class="grid size-11 place-items-center rounded-xl border border-[var(--hairline)] bg-white text-[var(--ink-soft)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] active:scale-90">
+                        <svg class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 5v10M5 10h10"/></svg>
+                    </button>
                 </div>
                 {{-- CTA --}}
                 <button
+                    type="button"
                     x-on:click="$wire.set('quantity', quantity); $wire.set('selectedOptions', selectedOptions); $wire.addToCart()"
                     x-bind:disabled="!canAdd"
                     x-bind:class="canAdd ? 'active:scale-95' : 'opacity-40 cursor-not-allowed'"
-                    class="flex-1 py-4 text-white font-black text-lg rounded-2xl shadow-lg transition"
+                    class="flex-1 rounded-xl px-4 py-3.5 text-[15px] font-semibold text-white transition"
                     style="background: var(--accent);"
                 >
-                    Προσθήκη — <span x-text="lineTotal.toFixed(2) + '€'"></span>
+                    Προσθήκη · <span class="price" x-text="lineTotal.toFixed(2).replace('.', ',') + ' €'"></span>
                 </button>
             </div>
         </div>
