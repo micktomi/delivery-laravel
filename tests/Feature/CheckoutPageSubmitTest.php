@@ -9,10 +9,11 @@ use App\Models\Category;
 use App\Models\Order;
 use App\Models\Product;
 use App\Services\CartService;
+use App\Services\PricingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\RateLimiter;
-use PHPUnit\Framework\Attributes\DataProvider;
 use Livewire\Livewire;
+use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -227,7 +228,7 @@ class CheckoutPageSubmitTest extends TestCase
     {
         $this->seedCart();
 
-        $this->swap(CreateOrder::class, new class(app(CartService::class), app(\App\Services\PricingService::class)) extends CreateOrder
+        $this->swap(CreateOrder::class, new class(app(CartService::class), app(PricingService::class)) extends CreateOrder
         {
             public function execute(array $checkoutData): Order
             {

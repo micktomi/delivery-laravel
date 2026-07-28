@@ -91,7 +91,7 @@ class AdminPanelAccessTest extends TestCase
 
     public function test_is_admin_cannot_be_mass_assigned(): void
     {
-        $user = new User();
+        $user = new User;
         $user->fill(['name' => 'X', 'email' => 'x@example.com', 'is_admin' => true]);
 
         $this->assertNotTrue($user->is_admin);

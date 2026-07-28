@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\EncodeProductImage;
 use App\Models\Category;
 use App\Models\Product;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -171,8 +172,8 @@ class ProductImageEncodingTest extends TestCase
         $product = $this->product('products/repeat.png');
         $encoded = Storage::disk('public')->get('products/repeat.webp');
 
-        app(\App\Actions\EncodeProductImage::class)->execute($product->fresh());
-        app(\App\Actions\EncodeProductImage::class)->execute($product->fresh());
+        app(EncodeProductImage::class)->execute($product->fresh());
+        app(EncodeProductImage::class)->execute($product->fresh());
 
         $this->assertSame($encoded, Storage::disk('public')->get('products/repeat.webp'));
     }

@@ -15,10 +15,15 @@ use Illuminate\Support\Str;
 class CategoryResource extends Resource
 {
     protected static ?string $model = Category::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-tag';
+
     protected static ?string $navigationLabel = 'Κατηγορίες';
+
     protected static ?string $modelLabel = 'Κατηγορία';
+
     protected static ?string $pluralModelLabel = 'Κατηγορίες';
+
     protected static ?int $navigationSort = 1;
 
     public static function form(Form $form): Form
@@ -28,8 +33,7 @@ class CategoryResource extends Resource
                 ->label('Όνομα')
                 ->required()
                 ->live(onBlur: true)
-                ->afterStateUpdated(fn ($state, Forms\Set $set, $old) =>
-                    $set('slug', Str::slug($state))
+                ->afterStateUpdated(fn ($state, Forms\Set $set, $old) => $set('slug', Str::slug($state))
                 ),
             Forms\Components\TextInput::make('slug')
                 ->label('Slug')

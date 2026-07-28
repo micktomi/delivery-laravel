@@ -32,7 +32,7 @@ class CartService
     public function update(int $index, int $qty): void
     {
         $cart = $this->items();
-        if (!isset($cart[$index])) {
+        if (! isset($cart[$index])) {
             return;
         }
 

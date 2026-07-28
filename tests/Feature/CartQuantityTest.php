@@ -2,13 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Enums\SelectionType;
 use App\Livewire\MenuPage;
 use App\Models\Category;
 use App\Models\OptionGroup;
 use App\Models\OptionValue;
 use App\Models\Product;
 use App\Services\CartService;
-use App\Enums\SelectionType;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;

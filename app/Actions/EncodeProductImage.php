@@ -12,8 +12,11 @@ class EncodeProductImage
      * Every stored photo ends up a square of this edge. The storefront paints
      * these at ~300px on mobile and ~200px in the desktop grid, so 600 covers
      * 2x retina. Smaller images are cropped but never upscaled.
+     *
+     * Public so `products:reencode-images --dry-run` can predict the result
+     * against the same number the encoder actually applies.
      */
-    private const EDGE = 600;
+    public const EDGE = 600;
 
     private const QUALITY = 80;
 
@@ -172,7 +175,11 @@ class EncodeProductImage
         return $binary;
     }
 
-    private function webpPath(string $path): string
+    /**
+     * Pure: derives the target path, touches nothing. Public so the dry run can
+     * name the file a real run would write without reimplementing the rule.
+     */
+    public function webpPath(string $path): string
     {
         $directory = trim(dirname($path), '.');
         $name = pathinfo($path, PATHINFO_FILENAME);

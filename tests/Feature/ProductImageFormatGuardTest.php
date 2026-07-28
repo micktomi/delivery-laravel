@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Form;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -22,7 +23,7 @@ class ProductImageFormatGuardTest extends TestCase
 
     public function test_the_upload_field_only_accepts_formats_gd_can_re_encode(): void
     {
-        $field = collect(ProductResource::form(new \Filament\Forms\Form(new ListProducts))->getComponents())
+        $field = collect(ProductResource::form(new Form(new ListProducts))->getComponents())
             ->first(fn ($component) => $component instanceof FileUpload && $component->getName() === 'image');
 
         $this->assertNotNull($field, 'The product form no longer has an image upload field.');

@@ -23,10 +23,15 @@ class OrderResource extends Resource
 
     // Public tracking uses an unguessable token; admin URLs stay on the id.
     protected static ?string $recordRouteKeyName = 'id';
+
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
+
     protected static ?string $navigationLabel = 'Παραγγελίες';
+
     protected static ?string $modelLabel = 'Παραγγελία';
+
     protected static ?string $pluralModelLabel = 'Παραγγελίες';
+
     protected static ?int $navigationSort = 4;
 
     public static function form(Form $form): Form
@@ -114,7 +119,7 @@ class OrderResource extends Resource
             Infolists\Components\Section::make('Στοιχεία παραγγελίας')->schema([
                 Infolists\Components\TextEntry::make('display_number')
                     ->label('#')
-                    ->formatStateUsing(fn ($state) => '#' . str_pad($state, 3, '0', STR_PAD_LEFT)),
+                    ->formatStateUsing(fn ($state) => '#'.str_pad($state, 3, '0', STR_PAD_LEFT)),
                 Infolists\Components\TextEntry::make('status')->label('Κατάσταση')->badge(),
                 Infolists\Components\TextEntry::make('payment_method')->label('Πληρωμή')->badge(),
                 Infolists\Components\TextEntry::make('placed_at')->label('Ώρα')->dateTime('d/m/Y H:i'),
@@ -132,15 +137,16 @@ class OrderResource extends Resource
                 Infolists\Components\RepeatableEntry::make('items')->label('')->schema([
                     Infolists\Components\TextEntry::make('product_name')
                         ->label('Προϊόν')
-                        ->formatStateUsing(fn ($state, $record) => $record->quantity . '× ' . $state),
+                        ->formatStateUsing(fn ($state, $record) => $record->quantity.'× '.$state),
                     Infolists\Components\TextEntry::make('selected_options')
                         ->label('Επιλογές')
                         ->formatStateUsing(function ($state) {
                             if (empty($state)) {
                                 return '-';
                             }
+
                             return collect($state)
-                                ->map(fn ($opt) => $opt['group'] . ': ' . $opt['value'])
+                                ->map(fn ($opt) => $opt['group'].': '.$opt['value'])
                                 ->implode(' · ');
                         }),
                     Infolists\Components\TextEntry::make('line_total')->label('Τιμή')->money('EUR'),

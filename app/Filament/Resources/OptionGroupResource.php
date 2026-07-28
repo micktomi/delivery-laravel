@@ -15,10 +15,15 @@ use Filament\Tables\Table;
 class OptionGroupResource extends Resource
 {
     protected static ?string $model = OptionGroup::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-adjustments-horizontal';
+
     protected static ?string $navigationLabel = 'Ομάδες Επιλογών';
+
     protected static ?string $modelLabel = 'Ομάδα Επιλογών';
+
     protected static ?string $pluralModelLabel = 'Ομάδες Επιλογών';
+
     protected static ?int $navigationSort = 3;
 
     public static function form(Form $form): Form

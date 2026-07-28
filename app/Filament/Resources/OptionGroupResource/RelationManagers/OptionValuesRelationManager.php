@@ -11,6 +11,7 @@ use Filament\Tables\Table;
 class OptionValuesRelationManager extends RelationManager
 {
     protected static string $relationship = 'optionValues';
+
     protected static ?string $title = 'Τιμές Επιλογής';
 
     public function form(Form $form): Form

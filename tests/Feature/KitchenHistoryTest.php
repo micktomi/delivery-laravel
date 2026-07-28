@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\OrderStatus;
+use App\Livewire\KitchenHistory;
 use App\Models\Order;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -69,7 +70,7 @@ class KitchenHistoryTest extends TestCase
 
         // Livewire test on KitchenHistory component
         Livewire::actingAs($user)
-            ->test(\App\Livewire\KitchenHistory::class)
+            ->test(KitchenHistory::class)
             ->assertViewHas('totalOrdersCount', 4) // completed, sent, cancelled, new (all today)
             ->assertViewHas('completedOrSentCount', 2) // completed + sent
             ->assertViewHas('cancelledCount', 1) // cancelled

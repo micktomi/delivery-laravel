@@ -12,6 +12,7 @@ use Filament\Tables\Table;
 class OptionGroupsRelationManager extends RelationManager
 {
     protected static string $relationship = 'optionGroups';
+
     protected static ?string $title = 'Πρότυπο Ομάδων Επιλογών';
 
     public function form(Form $form): Form

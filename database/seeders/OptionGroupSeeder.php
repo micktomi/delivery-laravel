@@ -6,7 +6,6 @@ namespace Database\Seeders;
 
 use App\Enums\SelectionType;
 use App\Models\OptionGroup;
-use App\Models\OptionValue;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 

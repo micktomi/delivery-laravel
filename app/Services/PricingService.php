@@ -7,6 +7,7 @@ class PricingService
     public function lineTotal(float $basePrice, array $selectedDeltas, int $qty): float
     {
         $unitPrice = $basePrice + array_sum($selectedDeltas);
+
         return round($unitPrice * $qty, 2);
     }
 

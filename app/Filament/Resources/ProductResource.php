@@ -4,7 +4,6 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\ProductResource\Pages;
 use App\Filament\Resources\ProductResource\RelationManagers;
-use App\Models\Category;
 use App\Models\Product;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -15,10 +14,15 @@ use Filament\Tables\Table;
 class ProductResource extends Resource
 {
     protected static ?string $model = Product::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-shopping-bag';
+
     protected static ?string $navigationLabel = 'Προϊόντα';
+
     protected static ?string $modelLabel = 'Προϊόν';
+
     protected static ?string $pluralModelLabel = 'Προϊόντα';
+
     protected static ?int $navigationSort = 2;
 
     public static function form(Form $form): Form

@@ -1,10 +1,10 @@
 <?php
 
 use App\Livewire\CheckoutPage;
+use App\Livewire\KitchenHistory;
 use App\Livewire\MenuPage;
 use App\Livewire\OrderBoard;
 use App\Livewire\OrderTrackingPage;
-use App\Livewire\KitchenHistory;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', MenuPage::class)->name('menu');

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ProductResource\RelationManagers;
 
+use App\Enums\SelectionType;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
@@ -12,6 +13,7 @@ use Filament\Tables\Table;
 class OptionGroupsRelationManager extends RelationManager
 {
     protected static string $relationship = 'optionGroups';
+
     protected static ?string $title = 'Ομάδες Επιλογών (Override)';
 
     public function form(Form $form): Form
@@ -28,7 +30,7 @@ class OptionGroupsRelationManager extends RelationManager
             ->columns([
                 Tables\Columns\TextColumn::make('name')->label('Όνομα'),
                 Tables\Columns\TextColumn::make('selection')->label('Τύπος')
-                    ->formatStateUsing(fn ($state) => $state instanceof \App\Enums\SelectionType ? $state->value : $state),
+                    ->formatStateUsing(fn ($state) => $state instanceof SelectionType ? $state->value : $state),
                 Tables\Columns\IconColumn::make('is_required')->label('Υποχρεωτική')->boolean(),
                 Tables\Columns\TextColumn::make('pivot.sort_order')->label('Σειρά'),
             ])

@@ -15,7 +15,7 @@ class OrderFactory extends Factory
             'status' => OrderStatus::Nea->value,
             'payment_method' => PaymentMethod::Cash->value,
             'customer_name' => fake()->name(),
-            'phone' => '69' . fake()->numerify('########'),
+            'phone' => '69'.fake()->numerify('########'),
             'address' => fake()->streetAddress(),
             'floor_bell' => null,
             'notes' => null,

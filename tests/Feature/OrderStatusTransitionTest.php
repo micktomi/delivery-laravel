@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Actions\CancelOrder;
 use App\Actions\TransitionOrderStatus;
 use App\Enums\OrderStatus;
+use App\Livewire\KitchenHistory;
 use App\Livewire\OrderBoard;
 use App\Models\Order;
 use App\Models\User;
@@ -122,7 +123,7 @@ class OrderStatusTransitionTest extends TestCase
             ->assertDontSee('Ακυρωμένος Πελάτης');
 
         Livewire::actingAs($user)
-            ->test(\App\Livewire\KitchenHistory::class)
+            ->test(KitchenHistory::class)
             ->assertViewHas('dailyRevenue', 10.00)
             ->assertViewHas('cancelledCount', 1);
     }

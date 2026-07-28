@@ -13,7 +13,7 @@ class KitchenHistory extends Component
 
         // 1. Calculate top metrics for today
         $totalOrdersCount = Order::whereDate('created_at', $today)->count();
-        
+
         $completedOrSentCount = Order::whereDate('created_at', $today)
             ->whereIn('status', ['completed', 'out'])
             ->count();
