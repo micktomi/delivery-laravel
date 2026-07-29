@@ -10,6 +10,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Features\SupportFileUploads\FileUploadConfiguration;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -26,7 +27,7 @@ class ProductImageUploadTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_a_jpeg_uploaded_in_the_admin_is_stored_as_a_jpeg(): void
+    public function test_a_jpeg_uploaded_in_the_admin_is_converted_to_webp_before_it_is_recorded(): void
     {
         Storage::fake('public');
 
@@ -35,11 +36,12 @@ class ProductImageUploadTest extends TestCase
         );
 
         $this->assertStringStartsWith('products/', $product->image);
-        $this->assertStringEndsWith('.jpg', $product->image);
+        $this->assertStringEndsWith('.webp', $product->image);
         Storage::disk('public')->assertExists($product->image);
+        $this->assertSame([600, 600], $this->dimensions($product->image));
     }
 
-    public function test_a_png_keeps_its_own_format_too(): void
+    public function test_a_png_is_converted_too(): void
     {
         Storage::fake('public');
 
@@ -47,11 +49,12 @@ class ProductImageUploadTest extends TestCase
             UploadedFile::fake()->createWithContent('espresso.png', $this->png()),
         );
 
-        $this->assertStringEndsWith('.png', $product->image);
+        $this->assertStringEndsWith('.webp', $product->image);
         Storage::disk('public')->assertExists($product->image);
+        $this->assertSame([600, 600], $this->dimensions($product->image));
     }
 
-    public function test_a_webp_upload_is_stored_unchanged(): void
+    public function test_a_webp_upload_is_squared_off_as_well(): void
     {
         Storage::fake('public');
 
@@ -61,6 +64,69 @@ class ProductImageUploadTest extends TestCase
 
         $this->assertStringEndsWith('.webp', $product->image);
         Storage::disk('public')->assertExists($product->image);
+        $this->assertSame([600, 600], $this->dimensions($product->image));
+    }
+
+    /**
+     * The fallback. Returning null from `saveUploadedFileUsing` would make
+     * Filament drop the entry *and* skip the `$file->delete()` that reaps the
+     * Livewire temp file, so a photo GD cannot read is stored as it arrived.
+     */
+    public function test_a_file_gd_cannot_decode_is_still_stored_rather_than_dropped(): void
+    {
+        Storage::fake('public');
+
+        $product = $this->createThroughFilament(
+            UploadedFile::fake()->createWithContent('broken.jpg', 'this is not an image'),
+        );
+
+        $this->assertNotNull($product->image);
+        $this->assertStringEndsWith('.jpg', $product->image);
+        Storage::disk('public')->assertExists($product->image);
+        $this->assertSame('this is not an image', Storage::disk('public')->get($product->image));
+    }
+
+    /**
+     * Taking over storage must not take over the cleanup: Filament deletes the
+     * temp file after the callback returns a path, and `storage/app/private/
+     * livewire-tmp` grows forever if that stops happening.
+     */
+    public function test_the_livewire_temp_file_is_reaped_after_a_custom_store(): void
+    {
+        Storage::fake('public');
+
+        $this->createThroughFilament(
+            UploadedFile::fake()->createWithContent('espresso.jpg', $this->jpeg()),
+        );
+
+        $this->assertSame([], FileUploadConfiguration::storage()->files(FileUploadConfiguration::path()));
+    }
+
+    /**
+     * Storage runs inside `beforeStateDehydrated`, which Filament reaches only
+     * after `validate()` has passed. A submit that fails on another field must
+     * therefore leave nothing behind on the permanent disk.
+     */
+    public function test_a_submit_that_fails_validation_writes_no_file(): void
+    {
+        Storage::fake('public');
+
+        $page = Livewire::actingAs(User::factory()->admin()->create())
+            ->test(CreateProduct::class)
+            ->fillForm([
+                'category_id' => $this->category()->id,
+                'name' => 'Espresso',
+                'sort_order' => 0,
+            ]);
+
+        $page->set('data.image', [
+            UploadedFile::fake()->createWithContent('espresso.jpg', $this->jpeg()),
+        ]);
+
+        $page->call('create')->assertHasFormErrors(['base_price']);
+
+        $this->assertSame([], Storage::disk('public')->allFiles());
+        $this->assertSame(0, Product::count());
     }
 
     /**
@@ -164,7 +230,7 @@ class ProductImageUploadTest extends TestCase
         $stored = $product->fresh()->image;
 
         $this->assertNotSame('products/existing.jpg', $stored);
-        $this->assertStringEndsWith('.png', $stored);
+        $this->assertStringEndsWith('.webp', $stored);
 
         Storage::disk('public')->assertExists($stored);
         Storage::disk('public')->assertMissing('products/existing.jpg');
@@ -249,6 +315,13 @@ class ProductImageUploadTest extends TestCase
     private function webp(): string
     {
         return $this->render('imagewebp');
+    }
+
+    private function dimensions(string $path): array
+    {
+        $image = imagecreatefromstring(Storage::disk('public')->get($path));
+
+        return [imagesx($image), imagesy($image)];
     }
 
     private function render(string $encoder): string

@@ -73,9 +73,9 @@ class EncodeProductImage
             return;
         }
 
-        $image = @imagecreatefromstring($contents);
+        $binary = $this->encodeBinary($contents);
 
-        if ($image === false) {
+        if ($binary === null) {
             Log::warning('product.image.undecodable', [
                 'product_id' => $product->id,
                 'path' => $path,
@@ -83,9 +83,6 @@ class EncodeProductImage
 
             return;
         }
-
-        $image = $this->squareOff($image);
-        $binary = $this->toWebp($image);
 
         $target = $this->webpPath($path);
 
@@ -122,6 +119,31 @@ class EncodeProductImage
         }
 
         Storage::disk('public')->delete($path);
+    }
+
+    /**
+     * The encoder proper, with no model and no disk anywhere near it: raw image
+     * bytes in, 600x600 WebP bytes out. Shared by `execute()` above and by the
+     * upload path in StoreProductImage, so a photo coming in through the admin
+     * and one converted later by the command go through identical pixels.
+     *
+     * Null means "GD could not turn these bytes into an image" — missing WebP
+     * support or a file it cannot decode. Callers decide what to do about it;
+     * neither of them destroys the source on the strength of a null.
+     */
+    public function encodeBinary(string $contents): ?string
+    {
+        if (! function_exists('imagewebp')) {
+            return null;
+        }
+
+        $image = @imagecreatefromstring($contents);
+
+        if ($image === false) {
+            return null;
+        }
+
+        return $this->toWebp($this->squareOff($image));
     }
 
     private function alreadyNormalised(string $path, string $contents): bool

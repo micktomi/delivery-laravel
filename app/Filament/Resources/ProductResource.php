@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Actions\StoreProductImage;
 use App\Filament\Resources\ProductResource\Pages;
 use App\Filament\Resources\ProductResource\RelationManagers;
 use App\Models\Product;
@@ -10,6 +11,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class ProductResource extends Resource
 {
@@ -41,17 +43,22 @@ class ProductResource extends Resource
                 ->label('Περιγραφή')
                 ->nullable()
                 ->rows(2),
-            // Whatever the browser sends is what gets stored, under the name
-            // Filament gives it. Nothing rewrites or renames the file during
-            // the save — that is the bug this field used to trip over, and the
-            // reason `products:reencode-images` is a separate command.
+            // The photo becomes a 600x600 WebP inside saveUploadedFileUsing,
+            // before Filament records the path anywhere. That ordering is the
+            // whole point: the component writes the returned path into both the
+            // column and its own Livewire state, then checks on every hydration
+            // that the file is still there. Converting afterwards — in a model
+            // hook, as this once did — renames the file out from under a field
+            // that is still pointing at the old name, and the field empties
+            // itself and takes the photo with it on the next save.
             //
-            // The resize options below are a bandwidth optimisation, not a
-            // guarantee: they keep an 8 MB phone photo off the café's 4G. Note
-            // that `cover` does NOT force a square, it only decides how the
-            // image fills the target box, so a portrait photo still arrives
-            // portrait. The 1:1 editor is what lets the owner choose the square
-            // deliberately; the storefront card centre-crops anything else.
+            // The resize options below are a bandwidth optimisation on top, not
+            // the guarantee: they keep an 8 MB phone photo off the café's 4G.
+            // `cover` does NOT force a square, it only decides how the image
+            // fills the target box, so a portrait photo still arrives portrait
+            // and the server-side crop is what squares it. The 1:1 editor is
+            // what lets the owner choose *which* square, and its cropped output
+            // is what gets uploaded — the original is reverted, not kept.
             Forms\Components\FileUpload::make('image')
                 ->label('Φωτογραφία')
                 ->helperText('Προαιρετικό — εμφανίζεται μόνο όταν όλα τα προϊόντα της κατηγορίας έχουν φωτογραφία.')
@@ -64,6 +71,7 @@ class ProductResource extends Resource
                 ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
                 ->disk('public')
                 ->directory('products')
+                ->saveUploadedFileUsing(fn (TemporaryUploadedFile $file, Forms\Components\FileUpload $component): ?string => app(StoreProductImage::class)->store($file, $component))
                 ->imageEditor()
                 ->imageEditorAspectRatios(['1:1'])
                 ->imageResizeMode('cover')
