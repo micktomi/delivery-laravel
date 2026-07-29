@@ -220,13 +220,15 @@ grep -Rn "upload_max_filesize\|post_max_size\|memory_limit\|max_execution_time" 
 upload_max_filesize = 8M     ; must be >= the 8 MB the form accepts
 post_max_size       = 10M    ; must exceed upload_max_filesize
 memory_limit        = 256M   ; minimum — see below
-max_execution_time  = 60     ; re-encoding a large photo is not instant
+max_execution_time  = 60     ; a slow phone upload is not instant
 ```
 
-`memory_limit` is the one that gets missed. `EncodeProductImage` decodes the
-upload into an uncompressed bitmap: a 6000×8000 photo needs roughly 190 MB for
-`imagecreatefromstring` alone, before the resized copy. At the common 128M
-default FPM kills the request and the owner sees a bare 500. **256M minimum.**
+`memory_limit` matters for the CLI rather than FPM now: no request decodes an
+image any more, but `products:reencode-images` does. `EncodeProductImage`
+decodes each photo into an uncompressed bitmap — a 6000×8000 source needs
+roughly 190 MB for `imagecreatefromstring` alone, before the resized copy — so
+the **CLI** `php.ini` needs the headroom or the command dies mid-catalogue.
+**256M minimum**, both pools, since the FPM defaults are what most people copy.
 
 **Reload and verify:**
 
@@ -266,12 +268,12 @@ no error. The difference shows up in nginx's access log as a 413.
 
 ## GD with real WebP support
 
-**Why:** a hard requirement, not a nice-to-have. `EncodeProductImage` is
-deliberately tolerant: if `imagewebp()` is unavailable it logs
-`product.image.encode_unavailable` and **returns without converting**. The
-upload still succeeds and the photo still renders — as an uncompressed JPEG or
-PNG, several times the intended size. Nothing breaks loudly. The presence of the
-GD extension alone does not prove WebP support; GD can be built without it.
+**Why:** needed by `products:reencode-images`, and by nothing else. Uploads do
+not depend on it — a photo is stored in whatever format it arrived in, and the
+storefront serves it as it is. Without WebP support the command refuses to run
+and existing photos simply stay JPEG or PNG: larger than intended, but correct.
+The presence of the GD extension alone does not prove WebP support; GD can be
+built without it.
 
 **Apply:**
 
@@ -301,19 +303,23 @@ only the CLI — the two can load different module sets:
 sudo php-fpm8.3 -i | grep -i -A3 "^gd$"
 ```
 
-**Symptom if missing:** uploads keep working, photos keep rendering, and the
-product list in `/admin` shows a red ⚠️ next to every affected row
-(`ProductResource::imageNeedsAttention`). `storage/logs/` fills with
-`product.image.encode_unavailable`.
+**Symptom if missing:** uploads and the storefront are unaffected.
+`products:reencode-images` exits with `GD with WebP support is missing.` and
+converts nothing.
 
 ---
 
 ## Re-encoding existing photos
 
-**Why:** photos uploaded before server-side encoding existed are still JPEG or
-PNG, and photos written by the first version of the encoder may be rectangular
-WebP. Both need a pass. Saving each product in the admin would also do it, but
-nobody is going to open forty products by hand.
+**Why:** uploads are stored in whatever format they arrived in, so the
+catalogue accumulates JPEG and PNG, and photos written by the first version of
+the encoder may be rectangular WebP. Both benefit from a pass. This command is
+the *only* thing that converts a photo — saving a product in the admin
+deliberately does not, because renaming and deleting a file during the save is
+what used to leave the upload field stuck and the column pointing at a file
+that was no longer there.
+
+Optional, and safe to skip: nothing breaks if the catalogue stays JPEG.
 
 **Always run the plan first:**
 
@@ -426,12 +432,14 @@ ls -la public/build/manifest.json
 - [ ] `TRUSTED_PROXIES` set to the reverse proxy. Without it, checkout rate
       limiting sees every customer as the same IP.
 - [ ] `storage/` and `bootstrap/cache/` writable by the web user.
-- [ ] `php artisan storage:link` done, GD/WebP present, and one uploaded product
-      photo actually renders on the storefront as a `.webp`.
+- [ ] `php artisan storage:link` done, and one uploaded product photo actually
+      renders on the storefront at the path stored in `products.image`.
+- [ ] GD/WebP present *if* you intend to run `products:reencode-images`.
 - [ ] FPM `upload_max_filesize`/`post_max_size`/`memory_limit`/`max_execution_time`
       verified through `php-fpm8.3 -i`, not the CLI.
 - [ ] nginx `client_max_body_size` verified through `nginx -T`.
-- [ ] `products:reencode-images --dry-run` reviewed, uploads backup taken.
+- [ ] Optional: `products:reencode-images --dry-run` reviewed, uploads backup
+      taken before the real run.
 - [ ] Admin login works and a second, non-admin staff user can reach `/kitchen`
       but **not** `/admin` (`is_admin = 0`).
 - [ ] Place one real order end to end, advance it on the board, cancel a test order.

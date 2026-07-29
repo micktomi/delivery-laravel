@@ -223,6 +223,80 @@ class ReencodeProductImagesCommandTest extends TestCase
         $this->assertSame('products/old.webp', $webp->fresh()->image);
     }
 
+    /**
+     * The command is the only thing that renames a photo now, and an operator
+     * will run it more than once. A second pass has to change nothing at all:
+     * not the path, not the bytes, not the row.
+     */
+    public function test_a_second_run_changes_nothing(): void
+    {
+        Storage::fake('public');
+
+        $jpeg = $this->legacyProduct('Espresso', 'products/one.jpg', 1600, 1600);
+        $wide = $this->legacyProduct('Freddo', 'products/two.png', 2000, 1000);
+        $rectangularWebp = $this->legacyProduct('Cappuccino', 'products/old.webp', 450, 600, 'imagewebp');
+
+        $this->artisan('products:reencode-images')->assertSuccessful();
+
+        $after = [
+            'files' => Storage::disk('public')->allFiles(),
+            'bytes' => collect(Storage::disk('public')->allFiles())
+                ->mapWithKeys(fn (string $path) => [$path => Storage::disk('public')->get($path)])
+                ->all(),
+            'rows' => Product::query()->orderBy('id')->get(['id', 'image', 'updated_at'])->toArray(),
+        ];
+
+        // Any silent save would move updated_at across this boundary.
+        $this->travelTo(now()->addHour());
+
+        $this->artisan('products:reencode-images')
+            ->expectsOutputToContain('3 checked, 0 converted.')
+            ->assertSuccessful();
+
+        $this->assertSame($after['files'], Storage::disk('public')->allFiles());
+
+        foreach ($after['bytes'] as $path => $bytes) {
+            $this->assertSame($bytes, Storage::disk('public')->get($path), "{$path} was rewritten by the second run.");
+        }
+
+        $this->assertSame(
+            $after['rows'],
+            Product::query()->orderBy('id')->get(['id', 'image', 'updated_at'])->toArray(),
+        );
+
+        $this->assertSame('products/one.webp', $jpeg->fresh()->image);
+        $this->assertSame('products/two.webp', $wide->fresh()->image);
+        $this->assertSame('products/old.webp', $rectangularWebp->fresh()->image);
+    }
+
+    /**
+     * Write the new file, repoint the row, then delete the source. A run that
+     * left the source behind would orphan it; one that deleted it early would
+     * leave the storefront pointing at nothing.
+     */
+    public function test_converting_leaves_no_orphan_and_no_dangling_row(): void
+    {
+        Storage::fake('public');
+
+        $this->legacyProduct('Espresso', 'products/one.jpg', 1600, 1600);
+        $this->legacyProduct('Freddo', 'products/two.png', 2000, 1000);
+        $this->legacyProduct('Latte', 'products/three.webp', 1200, 1200, 'imagewebp');
+
+        $this->artisan('products:reencode-images')->assertSuccessful();
+
+        $stored = Product::query()->pluck('image')->all();
+
+        foreach ($stored as $path) {
+            Storage::disk('public')->assertExists($path);
+        }
+
+        sort($stored);
+        $onDisk = Storage::disk('public')->allFiles();
+        sort($onDisk);
+
+        $this->assertSame($stored, $onDisk, 'The disk and the product rows disagree after a conversion run.');
+    }
+
     public function test_an_already_converted_photo_is_left_byte_identical(): void
     {
         Storage::fake('public');

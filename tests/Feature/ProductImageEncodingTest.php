@@ -9,6 +9,12 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
+/**
+ * The encoder is an explicit, opt-in step now — `products:reencode-images` is
+ * its only caller. It is never wired to a model event, because renaming and
+ * deleting a file mid-save is what broke the Filament upload field; the first
+ * test here is what stops that from being reintroduced.
+ */
 class ProductImageEncodingTest extends TestCase
 {
     use RefreshDatabase;
@@ -18,24 +24,43 @@ class ProductImageEncodingTest extends TestCase
         parent::setUp();
 
         if (! function_exists('imagewebp')) {
-            $this->fail('The GD extension with WebP support is required: stored photos are re-encoded on save.');
+            $this->fail('The GD extension with WebP support is required by products:reencode-images.');
         }
     }
 
-    public function test_a_large_png_is_stored_as_a_600px_webp_and_the_original_is_removed(): void
+    /**
+     * The invariant the whole fix rests on: saving a product touches no file
+     * and renames nothing, so whatever Filament wrote is still there when the
+     * FileUpload field hydrates from the column again.
+     */
+    public function test_saving_a_product_never_converts_or_renames_the_photo(): void
+    {
+        Storage::fake('public');
+        Storage::disk('public')->put('products/photo.jpg', $this->jpeg(1600, 1600));
+
+        $product = $this->product('products/photo.jpg');
+        $original = Storage::disk('public')->get('products/photo.jpg');
+
+        $product->update(['base_price' => '9.99']);
+        $product->save();
+
+        $this->assertSame('products/photo.jpg', $product->fresh()->image);
+        $this->assertSame(['products/photo.jpg'], Storage::disk('public')->allFiles());
+        $this->assertSame($original, Storage::disk('public')->get('products/photo.jpg'));
+    }
+
+    public function test_a_large_png_is_encoded_to_a_600px_webp_and_the_original_is_removed(): void
     {
         Storage::fake('public');
         Storage::disk('public')->put('products/big.png', $this->png(1600, 1600));
 
-        $product = $this->product('products/big.png');
+        $product = $this->encode($this->product('products/big.png'));
 
         $this->assertSame('products/big.webp', $product->fresh()->image);
         Storage::disk('public')->assertExists('products/big.webp');
         Storage::disk('public')->assertMissing('products/big.png');
 
-        [$width, $height] = $this->dimensions('products/big.webp');
-        $this->assertSame(600, $width);
-        $this->assertSame(600, $height);
+        $this->assertSame([600, 600], $this->dimensions('products/big.webp'));
     }
 
     /**
@@ -49,11 +74,9 @@ class ProductImageEncodingTest extends TestCase
         Storage::fake('public');
         Storage::disk('public')->put('products/wide.png', $this->png(2000, 1000));
 
-        $this->product('products/wide.png');
+        $this->encode($this->product('products/wide.png'));
 
-        [$width, $height] = $this->dimensions('products/wide.webp');
-        $this->assertSame(600, $width);
-        $this->assertSame(600, $height);
+        $this->assertSame([600, 600], $this->dimensions('products/wide.webp'));
     }
 
     public function test_a_tall_photo_is_cropped_to_a_square_too(): void
@@ -61,7 +84,7 @@ class ProductImageEncodingTest extends TestCase
         Storage::fake('public');
         Storage::disk('public')->put('products/tall.png', $this->png(800, 1600));
 
-        $this->product('products/tall.png');
+        $this->encode($this->product('products/tall.png'));
 
         $this->assertSame([600, 600], $this->dimensions('products/tall.webp'));
     }
@@ -79,7 +102,7 @@ class ProductImageEncodingTest extends TestCase
         imagefilledrectangle($image, 300, 0, 899, 599, imagecolorallocate($image, 30, 200, 30));
         Storage::disk('public')->put('products/banded.png', $this->render($image, 'imagepng'));
 
-        $this->product('products/banded.png');
+        $this->encode($this->product('products/banded.png'));
 
         $encoded = imagecreatefromstring(Storage::disk('public')->get('products/banded.webp'));
         $centre = imagecolorsforindex($encoded, imagecolorat($encoded, 300, 300));
@@ -92,134 +115,92 @@ class ProductImageEncodingTest extends TestCase
         Storage::fake('public');
         Storage::disk('public')->put('products/small.png', $this->png(240, 180));
 
-        $this->product('products/small.png');
+        $this->encode($this->product('products/small.png'));
 
         // 180 is the largest square this photo contains; padding it out to 600
         // would only cost bytes for pixels that were never captured.
         $this->assertSame([180, 180], $this->dimensions('products/small.webp'));
     }
 
-    /**
-     * The invariant the whole action exists for: whatever FilePond did or did
-     * not do in the browser, the column cannot end up pointing at a JPEG.
-     */
-    public function test_a_jpeg_upload_still_ends_up_as_webp_in_the_column(): void
+    public function test_a_jpeg_ends_up_as_webp_in_the_column(): void
     {
         Storage::fake('public');
         Storage::disk('public')->put('products/photo.jpg', $this->jpeg(1200, 1200));
 
-        $product = $this->product('products/photo.jpg');
+        $product = $this->encode($this->product('products/photo.jpg'));
 
-        $this->assertStringEndsWith('.webp', $product->fresh()->image);
+        $this->assertSame('products/photo.webp', $product->fresh()->image);
         Storage::disk('public')->assertMissing('products/photo.jpg');
     }
 
-    public function test_replacing_an_image_encodes_the_new_file_and_drops_both_old_ones(): void
+    /**
+     * Write, repoint, then delete — never the other way round. At no point may
+     * the column name a file that is not on the disk.
+     */
+    public function test_the_column_and_the_disk_agree_after_encoding(): void
     {
         Storage::fake('public');
-        Storage::disk('public')->put('products/old.webp', $this->webp(600, 600));
-        Storage::disk('public')->put('products/new.png', $this->png(1600, 1600));
+        Storage::disk('public')->put('products/photo.jpg', $this->jpeg(1200, 1200));
 
-        $product = $this->product('products/old.webp');
+        $product = $this->encode($this->product('products/photo.jpg'));
 
-        $product->update(['image' => 'products/new.png']);
+        $stored = $product->fresh()->image;
 
-        $this->assertSame('products/new.webp', $product->fresh()->image);
-        Storage::disk('public')->assertMissing('products/old.webp');
-        Storage::disk('public')->assertMissing('products/new.png');
-        Storage::disk('public')->assertExists('products/new.webp');
-    }
-
-    public function test_saving_an_unrelated_field_does_not_re_encode(): void
-    {
-        Storage::fake('public');
-        Storage::disk('public')->put('products/stable.png', $this->png(800, 800));
-
-        $product = $this->product('products/stable.png');
-        $encoded = Storage::disk('public')->get('products/stable.webp');
-
-        $product->update(['base_price' => '9.99']);
-
-        $this->assertSame($encoded, Storage::disk('public')->get('products/stable.webp'));
+        Storage::disk('public')->assertExists($stored);
+        $this->assertSame([$stored], Storage::disk('public')->allFiles());
     }
 
     /**
-     * A file GD cannot read is left untouched rather than destroyed. This also
-     * pins the behaviour the existing cleanup tests rely on.
+     * A file GD cannot read is left untouched rather than destroyed, and the
+     * column keeps pointing at it, so the storefront carries on serving it.
      */
     public function test_an_undecodable_file_is_left_alone(): void
     {
         Storage::fake('public');
         Storage::disk('public')->put('products/not-an-image.jpg', 'x');
 
-        $product = $this->product('products/not-an-image.jpg');
+        $product = $this->encode($this->product('products/not-an-image.jpg'));
 
         $this->assertSame('products/not-an-image.jpg', $product->fresh()->image);
         Storage::disk('public')->assertExists('products/not-an-image.jpg');
     }
 
     /**
-     * The trigger cannot tell a first save from a later one — `wasChanged`
-     * is already false on create and `wasRecentlyCreated` never resets — so
-     * the action itself has to be safe to call repeatedly. Re-encoding a WebP
-     * at quality 80 on every save would compound generation loss.
+     * Re-encoding a WebP at quality 80 on every run would compound generation
+     * loss, so a second pass has to be a genuine no-op.
      */
     public function test_encoding_the_same_product_repeatedly_leaves_the_file_byte_identical(): void
     {
         Storage::fake('public');
         Storage::disk('public')->put('products/repeat.png', $this->png(1600, 1600));
 
-        $product = $this->product('products/repeat.png');
+        $product = $this->encode($this->product('products/repeat.png'));
         $encoded = Storage::disk('public')->get('products/repeat.webp');
 
-        app(EncodeProductImage::class)->execute($product->fresh());
-        app(EncodeProductImage::class)->execute($product->fresh());
+        $this->encode($product->fresh());
+        $this->encode($product->fresh());
 
         $this->assertSame($encoded, Storage::disk('public')->get('products/repeat.webp'));
+        $this->assertSame('products/repeat.webp', $product->fresh()->image);
     }
 
     /**
      * The one case the extension check alone would wave through: a WebP that
-     * is genuinely too large still gets downscaled.
+     * is genuinely too large still gets downscaled, in place.
      */
     public function test_an_oversized_webp_is_still_downscaled(): void
     {
         Storage::fake('public');
         Storage::disk('public')->put('products/huge.webp', $this->webp(1400, 1400));
 
-        $this->product('products/huge.webp');
+        $product = $this->encode($this->product('products/huge.webp'));
 
-        [$width, $height] = $this->dimensions('products/huge.webp');
-        $this->assertSame(600, $width);
-        $this->assertSame(600, $height);
-    }
+        $this->assertSame([600, 600], $this->dimensions('products/huge.webp'));
 
-    /**
-     * The case a guarded trigger strands entirely: a product still holding a
-     * photo from before server-side encoding existed. Nothing is dirty, nothing
-     * changed, `wasRecentlyCreated` is false — and it must still convert, because
-     * hitting Save in the admin is the obvious thing an owner will try.
-     */
-    public function test_a_legacy_jpeg_converts_on_a_save_that_changes_nothing(): void
-    {
-        Storage::fake('public');
-        Storage::disk('public')->put('products/legacy.jpg', $this->jpeg(1600, 1600));
-
-        $product = $this->product('products/legacy.jpg');
-
-        // Put the row back the way a pre-encoder upload would have left it,
-        // without going through the observer.
-        $product->forceFill(['image' => 'products/legacy.jpg'])->saveQuietly();
-        Storage::disk('public')->put('products/legacy.jpg', $this->jpeg(1600, 1600));
-
-        $reloaded = Product::find($product->id);
-        $this->assertFalse($reloaded->wasRecentlyCreated);
-
-        $reloaded->save();
-
-        $this->assertSame('products/legacy.webp', $reloaded->fresh()->image);
-        $this->assertSame([600, 600], $this->dimensions('products/legacy.webp'));
-        Storage::disk('public')->assertMissing('products/legacy.jpg');
+        // Rewritten under its own name, so nothing repoints and nothing is
+        // deleted — the file the column already names must survive.
+        $this->assertSame('products/huge.webp', $product->fresh()->image);
+        Storage::disk('public')->assertExists('products/huge.webp');
     }
 
     public function test_a_product_without_an_image_never_touches_the_disk(): void
@@ -227,11 +208,27 @@ class ProductImageEncodingTest extends TestCase
         Storage::fake('public');
 
         $product = $this->product(null);
-        $product->save();
-        $product->update(['base_price' => '3.30']);
+        $this->encode($product);
 
         $this->assertNull($product->fresh()->image);
         $this->assertSame([], Storage::disk('public')->allFiles());
+    }
+
+    public function test_a_column_naming_a_file_that_is_gone_is_left_as_it_is(): void
+    {
+        Storage::fake('public');
+
+        $product = $this->encode($this->product('products/vanished.jpg'));
+
+        $this->assertSame('products/vanished.jpg', $product->fresh()->image);
+        $this->assertSame([], Storage::disk('public')->allFiles());
+    }
+
+    private function encode(Product $product): Product
+    {
+        app(EncodeProductImage::class)->execute($product);
+
+        return $product;
     }
 
     private function dimensions(string $path): array

@@ -21,10 +21,12 @@ class EncodeProductImage
     private const QUALITY = 80;
 
     /**
-     * Centre-crop to a square and re-encode to WebP on the server, so what
-     * lands on disk is the same whatever the browser did on the way in. The
-     * FilePond transform still runs — it saves the café's phone from uploading
-     * 8 MB — but it is no longer the thing we trust for what gets stored.
+     * Centre-crop to a square and re-encode to WebP.
+     *
+     * Called only by `products:reencode-images`, never from a request. It
+     * renames the file and deletes the source, which cannot happen underneath
+     * a Filament save without stranding the FileUpload field on a path that no
+     * longer exists — see the note on ProductObserver.
      *
      * The crop costs nothing visually: the storefront card already centre-crops
      * with `object-cover`, so the visible result is identical. It stops storing
@@ -34,14 +36,16 @@ class EncodeProductImage
      * Deliberately tolerant: a file GD cannot decode is left exactly as it is
      * and logged. Destroying an upload we failed to understand is worse than
      * serving it unconverted, and the warning is the signal that it happened.
+     *
+     * Idempotent: a second run over an already-normalised photo reads one file
+     * header and returns, writing nothing and saving nothing.
      */
     public function execute(Product $product): void
     {
         $path = $product->image;
 
-        // Checked before anything else and kept separate from the exists()
-        // call below: the observer now calls this on every single product save,
-        // and a product with no photo must not reach the disk at all.
+        // Kept separate from the exists() call below so a product with no photo
+        // never reaches the disk at all.
         if (blank($path)) {
             return;
         }
@@ -62,12 +66,9 @@ class EncodeProductImage
 
         $contents = Storage::disk('public')->get($path);
 
-        // Idempotency guard, and it has to live here rather than in the trigger:
-        // `wasChanged('image')` is already false by the time `saved` fires on a
-        // create, and `wasRecentlyCreated` stays true for the life of the model
-        // instance. Any trigger precise enough to catch the first case re-fires
-        // on the second, and re-encoding a WebP at quality 80 on every save
-        // compounds generation loss. Cheap: reads the header, not the pixels.
+        // What makes a second run of the command a no-op. Without it, every run
+        // would re-encode every photo at quality 80 and compound generation
+        // loss. Cheap: reads the header, not the pixels.
         if ($this->alreadyNormalised($path, $contents)) {
             return;
         }
@@ -88,17 +89,39 @@ class EncodeProductImage
 
         $target = $this->webpPath($path);
 
-        Storage::disk('public')->put($target, $binary);
-
         // Write the new file, repoint the column, and only then drop the
-        // source. Losing the delete leaves an orphan; losing the write in the
-        // other order would leave a product pointing at nothing.
-        if ($target !== $path) {
-            $product->image = $target;
-            $product->saveQuietly();
+        // source — and abandon the whole sequence the moment a step reports
+        // failure. Deleting the source after a failed write would leave the
+        // product pointing at nothing; deleting it after a failed save would
+        // leave the row pointing at the file we just removed. An orphan is the
+        // one outcome here that costs nothing but disk.
+        if (! Storage::disk('public')->put($target, $binary)) {
+            Log::error('product.image.write_failed', [
+                'product_id' => $product->id,
+                'path' => $path,
+                'target' => $target,
+            ]);
 
-            Storage::disk('public')->delete($path);
+            return;
         }
+
+        if ($target === $path) {
+            return;
+        }
+
+        $product->image = $target;
+
+        if (! $product->saveQuietly()) {
+            Log::error('product.image.repoint_failed', [
+                'product_id' => $product->id,
+                'path' => $path,
+                'target' => $target,
+            ]);
+
+            return;
+        }
+
+        Storage::disk('public')->delete($path);
     }
 
     private function alreadyNormalised(string $path, string $contents): bool

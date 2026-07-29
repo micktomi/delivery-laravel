@@ -14,71 +14,71 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * The two guards around HEIC: refuse it at upload, and surface anything that
- * slipped through in the one place a café owner actually looks.
+ * What the upload field will and will not take, and what the list does with
+ * the result. JPEG and PNG are ordinary stored formats now, not a symptom, so
+ * the only thing still worth refusing is a format browsers cannot render.
  */
 class ProductImageFormatGuardTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_the_upload_field_only_accepts_formats_gd_can_re_encode(): void
+    public function test_the_upload_field_accepts_the_three_web_image_formats(): void
     {
-        $field = collect(ProductResource::form(new Form(new ListProducts))->getComponents())
-            ->first(fn ($component) => $component instanceof FileUpload && $component->getName() === 'image');
-
-        $this->assertNotNull($field, 'The product form no longer has an image upload field.');
-
-        $accepted = $field->getAcceptedFileTypes();
+        $accepted = $this->uploadField()->getAcceptedFileTypes();
 
         $this->assertEqualsCanonicalizing(
             ['image/jpeg', 'image/png', 'image/webp'],
             $accepted,
         );
 
-        // The whole point of the list: HEIC fails twice over, once in GD and
-        // again in the browser, so it must never reach disk.
+        // The whole point of the list: HEIC is what an iPhone hands over and
+        // no browser will paint it, so it must never reach the disk.
         $this->assertNotContains('image/heic', $accepted);
         $this->assertNotContains('image/heif', $accepted);
     }
 
-    public function test_a_non_webp_image_is_flagged(): void
+    public function test_the_upload_field_stores_onto_the_public_disk_under_products(): void
     {
-        $this->assertTrue(
-            ProductResource::imageNeedsAttention($this->product('products/stuck.jpg')),
-        );
+        $field = $this->uploadField();
+
+        $this->assertSame('public', $field->getDiskName());
+        $this->assertSame('products', $field->getDirectory());
     }
 
-    public function test_a_webp_image_is_not_flagged(): void
+    /**
+     * A JPEG or PNG on the disk is a working photo, so the list must not
+     * decorate it with a failure. The red warning column that used to sit here
+     * reported a problem that no longer exists.
+     */
+    public function test_the_product_list_does_not_flag_a_non_webp_photo(): void
     {
-        $this->assertFalse(
-            ProductResource::imageNeedsAttention($this->product('products/fine.webp')),
-        );
-    }
-
-    public function test_a_product_with_no_photo_is_not_flagged(): void
-    {
-        $this->assertFalse(
-            ProductResource::imageNeedsAttention($this->product(null)),
-        );
-    }
-
-    public function test_an_uppercase_extension_is_not_mistaken_for_a_failure(): void
-    {
-        $this->assertFalse(
-            ProductResource::imageNeedsAttention($this->product('products/shouty.WEBP')),
-        );
-    }
-
-    public function test_the_product_list_renders_the_warning_column(): void
-    {
-        $stuck = $this->product('products/stuck.jpg');
-        $fine = $this->product('products/fine.webp', 'Freddo');
+        $jpeg = $this->product('products/stuck.jpg');
+        $webp = $this->product('products/fine.webp', 'Freddo');
 
         Livewire::actingAs(User::factory()->admin()->create())
             ->test(ListProducts::class)
-            ->assertCanSeeTableRecords([$stuck, $fine])
-            ->assertTableColumnStateSet('image_conversion', true, $stuck)
-            ->assertTableColumnStateSet('image_conversion', false, $fine);
+            ->assertCanSeeTableRecords([$jpeg, $webp])
+            ->assertTableColumnDoesNotExist('image_conversion');
+    }
+
+    public function test_the_product_list_still_shows_the_photo_itself(): void
+    {
+        $product = $this->product('products/fine.webp');
+
+        Livewire::actingAs(User::factory()->admin()->create())
+            ->test(ListProducts::class)
+            ->assertCanSeeTableRecords([$product])
+            ->assertTableColumnExists('image');
+    }
+
+    private function uploadField(): FileUpload
+    {
+        $field = collect(ProductResource::form(new Form(new ListProducts))->getComponents())
+            ->first(fn ($component) => $component instanceof FileUpload && $component->getName() === 'image');
+
+        $this->assertNotNull($field, 'The product form no longer has an image upload field.');
+
+        return $field;
     }
 
     private function product(?string $image, string $name = 'Espresso'): Product
