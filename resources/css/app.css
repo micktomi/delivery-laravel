@@ -77,3 +77,53 @@ body:has([data-product-customization-modal]) {
     overflow: hidden;
     overscroll-behavior: none;
 }
+
+/* ── Kitchen board: one status column at a time on a phone ──
+   Four kanban columns need ~300px each to keep an order card readable; on a
+   phone that leaves ~90px per column, which is where the clipping came from.
+   A phone shows the selected column only, full width, in normal page flow.
+
+   Written mobile-first ON PURPOSE — the single column is the *unconditional*
+   default and the kanban is what a media query opts into. Tailwind v4 emits
+   every breakpoint as media-range syntax (`@media (width>=48rem)`), which an
+   engine older than Chrome 104 / Safari 16.4 treats as invalid and drops. On
+   such a browser — an un-updated Android WebView, say — every `md:`/`xl:`
+   utility silently disappears, and whatever survives has to be the layout a
+   phone can actually use. That is exactly the failure this replaced: the
+   rules lived in a `max-width` query, so on that device nothing hid at all.
+
+   The selection is written to <body>, outside the Livewire root, on purpose:
+   the board polls every 10s and Livewire's morph copies the server's
+   attributes verbatim onto the live DOM (see patchAttributes in its dist), so
+   anything x-bind wrote inside the component would snap back to ΝΕΑ on every
+   poll. Body is never morphed, and with no attribute set at all the default
+   below already renders ΝΕΑ, so the first paint is right before Alpine boots. */
+[data-kitchen-column] { display: none; }
+
+[data-kitchen-tab] {
+    opacity: .45;
+    box-shadow: none;
+}
+
+body:not([data-kitchen-status])       [data-kitchen-column='nea'],
+body[data-kitchen-status='nea']       [data-kitchen-column='nea'],
+body[data-kitchen-status='preparing'] [data-kitchen-column='preparing'],
+body[data-kitchen-status='ready']     [data-kitchen-column='ready'],
+body[data-kitchen-status='out']       [data-kitchen-column='out'] {
+    display: flex;
+}
+
+body:not([data-kitchen-status])       [data-kitchen-tab='nea'],
+body[data-kitchen-status='nea']       [data-kitchen-tab='nea'],
+body[data-kitchen-status='preparing'] [data-kitchen-tab='preparing'],
+body[data-kitchen-status='ready']     [data-kitchen-tab='ready'],
+body[data-kitchen-status='out']       [data-kitchen-tab='out'] {
+    opacity: 1;
+    box-shadow: inset 0 -4px 0 0 rgb(28 25 23 / .5);
+}
+
+/* From the tablet up every column is back on screen at once. Same specificity
+   as the hide rule above, so this wins on source order alone. */
+@media (min-width: 48rem) {
+    [data-kitchen-column] { display: flex; }
+}

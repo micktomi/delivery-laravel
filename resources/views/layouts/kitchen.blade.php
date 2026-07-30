@@ -8,7 +8,9 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
 </head>
-<body class="bg-gray-100 overflow-hidden">
+{{-- overflow-hidden only from the tablet up: the board pins itself to the
+     viewport there, but a phone has to scroll the page normally. --}}
+<body class="bg-gray-100 md:overflow-hidden">
     {{ $slot }}
     @livewireScripts
 </body>
