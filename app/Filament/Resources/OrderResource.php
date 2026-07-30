@@ -59,6 +59,9 @@ class OrderResource extends Resource
                 Tables\Columns\TextColumn::make('payment_method')
                     ->label('Πληρωμή')
                     ->badge(),
+                Tables\Columns\TextColumn::make('coupon_code')
+                    ->label('Κουπόνι')
+                    ->placeholder('—'),
                 Tables\Columns\TextColumn::make('total')->label('Σύνολο')->money('EUR'),
                 Tables\Columns\TextColumn::make('placed_at')
                     ->label('Ώρα')
@@ -153,10 +156,19 @@ class OrderResource extends Resource
                 ])->columns(3),
             ]),
 
+            // Snapshots, not a live read of the coupon: these are the figures
+            // the courier collected on, whatever the coupon says today.
             Infolists\Components\Section::make('Σύνολα')->schema([
                 Infolists\Components\TextEntry::make('subtotal')->label('Υποσύνολο')->money('EUR'),
+                Infolists\Components\TextEntry::make('coupon_code')
+                    ->label('Κουπόνι')
+                    ->placeholder('—'),
+                Infolists\Components\TextEntry::make('discount_amount')
+                    ->label('Έκπτωση')
+                    ->money('EUR')
+                    ->color(fn (Order $record) => $record->hasDiscount() ? 'success' : null),
                 Infolists\Components\TextEntry::make('delivery_fee')->label('Μεταφορικά')->money('EUR'),
-                Infolists\Components\TextEntry::make('total')->label('Σύνολο')->money('EUR'),
+                Infolists\Components\TextEntry::make('total')->label('Σύνολο')->money('EUR')->weight('bold'),
             ])->columns(3),
         ]);
     }

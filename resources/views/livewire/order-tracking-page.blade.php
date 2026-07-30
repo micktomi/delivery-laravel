@@ -119,9 +119,23 @@
                     @endif
                 </div>
             @endforeach
-            <div class="px-5 py-4 flex justify-between items-baseline bg-gray-50">
-                <span class="font-bold text-base text-gray-600">Σύνολο</span>
-                <span class="font-black text-xl" style="color: var(--accent)">{{ number_format($order->total, 2) }}€</span>
+            {{-- Three lines, never just the discounted total: the courier
+                 collects this amount and needs to see why it is lower. --}}
+            <div class="px-5 py-4 bg-gray-50 space-y-1">
+                <div class="flex justify-between items-baseline text-sm text-gray-500">
+                    <span class="font-semibold">Υποσύνολο</span>
+                    <span class="font-bold">{{ number_format($order->subtotal, 2) }}€</span>
+                </div>
+                @if($order->hasDiscount())
+                    <div class="flex justify-between items-baseline text-sm text-emerald-700">
+                        <span class="font-semibold">Έκπτωση ({{ $order->coupon_code }})</span>
+                        <span class="font-bold">−{{ number_format($order->discount_amount, 2) }}€</span>
+                    </div>
+                @endif
+                <div class="flex justify-between items-baseline pt-1">
+                    <span class="font-bold text-base text-gray-600">Σύνολο</span>
+                    <span class="font-black text-xl" style="color: var(--accent)">{{ number_format($order->total, 2) }}€</span>
+                </div>
             </div>
         </div>
     </div>

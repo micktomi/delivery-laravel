@@ -23,7 +23,6 @@
     }
 
     $cartCount = array_sum(array_column($cart, 'quantity'));
-    $cartSubtotal = array_sum(array_map(fn ($line) => (float) $line['line_total'], $cart));
     $cartCountLabel = $cartCount.' '.($cartCount === 1 ? 'προϊόν' : 'προϊόντα');
 @endphp
 <div
@@ -173,10 +172,7 @@
 
             @if($cart)
             <div class="shrink-0 border-t border-[var(--hairline)] bg-[var(--sunken)] px-4 py-4">
-                <div class="mb-3 flex items-baseline justify-between">
-                    <span class="text-[13px] font-medium text-[var(--ink-soft)]">Σύνολο</span>
-                    <span class="price font-display text-xl font-extrabold" style="color: var(--accent)">{{ number_format($cartSubtotal, 2, ',', '.') }} €</span>
-                </div>
+                @include('livewire.partials.cart-summary', ['scope' => 'desktop'])
                 <a
                     href="/checkout"
                     class="block w-full rounded-xl px-4 py-3 text-center text-[14px] font-semibold text-white transition active:scale-95"
@@ -202,7 +198,7 @@
     >
         <span class="price grid size-7 shrink-0 place-items-center rounded-lg bg-white/20 text-[13px] font-bold">{{ $cartCount }}</span>
         <span class="text-[14px] font-semibold">Ολοκλήρωση</span>
-        <span class="price font-display ml-auto text-[15px] font-extrabold">{{ number_format($cartSubtotal, 2, ',', '.') }} €</span>
+        <span class="price font-display ml-auto text-[15px] font-extrabold">{{ number_format($totals['total'], 2, ',', '.') }} €</span>
     </button>
 </div>
 @endif
@@ -266,10 +262,7 @@
     {{-- Footer: subtotal + CTA --}}
     @if($cart)
     <div class="shrink-0 border-t border-[var(--hairline)] bg-[var(--sunken)] px-4 pb-4 pt-4">
-        <div class="mb-3 flex items-baseline justify-between">
-            <span class="text-sm font-medium text-[var(--ink-soft)]">Σύνολο</span>
-            <span class="price font-display text-2xl font-extrabold" style="color: var(--accent)">{{ number_format($cartSubtotal, 2, ',', '.') }} €</span>
-        </div>
+        @include('livewire.partials.cart-summary', ['scope' => 'mobile'])
         <a
             href="/checkout"
             class="block w-full rounded-xl px-4 py-3.5 text-center text-[15px] font-semibold text-white transition active:scale-95"

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Coupon;
 use Illuminate\Support\Facades\Session;
 
 class CartService
@@ -12,7 +13,7 @@ class CartService
 
     public function items(): array
     {
-        return Session::get(self::KEY, []);
+        return $this->state()['lines'];
     }
 
     public function add(array $line): void
@@ -26,7 +27,7 @@ class CartService
 
         $cart = $this->items();
         $cart[] = $line;
-        Session::put(self::KEY, $cart);
+        $this->putLines($cart);
     }
 
     public function update(int $index, int $qty): void
@@ -46,14 +47,14 @@ class CartService
             $qty
         );
 
-        Session::put(self::KEY, $cart);
+        $this->putLines($cart);
     }
 
     public function remove(int $index): void
     {
         $cart = $this->items();
         array_splice($cart, $index, 1);
-        Session::put(self::KEY, array_values($cart));
+        $this->putLines($cart);
     }
 
     /**
@@ -61,9 +62,13 @@ class CartService
      */
     public function replace(array $lines): void
     {
-        Session::put(self::KEY, array_values($lines));
+        $this->putLines($lines);
     }
 
+    /**
+     * Drops the coupon with the lines: they are one session value, so a
+     * discount can never outlive the basket that earned it.
+     */
     public function clear(): void
     {
         Session::forget(self::KEY);
@@ -79,11 +84,76 @@ class CartService
         return app(PricingService::class)->subtotal($this->items());
     }
 
+    public function couponCode(): ?string
+    {
+        return $this->state()['coupon_code'];
+    }
+
+    public function coupon(): ?Coupon
+    {
+        return Coupon::findByCode($this->couponCode());
+    }
+
+    public function applyCoupon(Coupon $coupon): void
+    {
+        $this->put($this->items(), $coupon->code);
+    }
+
+    public function removeCoupon(): void
+    {
+        $this->put($this->items(), null);
+    }
+
+    /**
+     * @return array{subtotal: float, discount: float, total: float}
+     */
+    public function totals(float $deliveryFee = 0.0): array
+    {
+        return app(PricingService::class)->totals($this->items(), $this->coupon(), $deliveryFee);
+    }
+
     /**
      * Quantities arrive from the browser, so they are never trusted as-is.
      */
     public function normalizeQuantity(mixed $qty): int
     {
         return max(1, min(self::MAX_QUANTITY, (int) $qty));
+    }
+
+    /**
+     * @return array{lines: array, coupon_code: ?string}
+     */
+    private function state(): array
+    {
+        $state = Session::get(self::KEY, []);
+
+        if (! is_array($state)) {
+            return ['lines' => [], 'coupon_code' => null];
+        }
+
+        // A cart stored before coupons existed is a bare list of lines.
+        if (! array_key_exists('lines', $state)) {
+            return ['lines' => array_values($state), 'coupon_code' => null];
+        }
+
+        $code = $state['coupon_code'] ?? null;
+
+        return [
+            'lines' => array_values((array) ($state['lines'] ?? [])),
+            'coupon_code' => is_string($code) && $code !== '' ? $code : null,
+        ];
+    }
+
+    private function putLines(array $lines): void
+    {
+        $this->put($lines, $this->couponCode());
+    }
+
+    private function put(array $lines, ?string $couponCode): void
+    {
+        Session::put(self::KEY, [
+            'lines' => array_values($lines),
+            'coupon_code' => $couponCode,
+        ]);
     }
 }

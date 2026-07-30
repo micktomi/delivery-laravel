@@ -84,8 +84,17 @@
                                     >
                                         {{ $order->payment_method->getLabel() }}
                                     </span>
-                                    <span class="font-black text-lg text-gray-900 w-24 text-right">
-                                        {{ number_format($order->total, 2) }}€
+                                    <span class="w-24 text-right">
+                                        <span class="block font-black text-lg text-gray-900">
+                                            {{ number_format($order->total, 2) }}€
+                                        </span>
+                                        @if($order->hasDiscount())
+                                            {{-- The row would otherwise read as a pricing mistake. --}}
+                                            <span class="block text-[11px] font-bold leading-tight text-emerald-700">
+                                                {{ number_format($order->subtotal, 2) }}€ − {{ number_format($order->discount_amount, 2) }}€
+                                                <span class="block text-gray-400">{{ $order->coupon_code }}</span>
+                                            </span>
+                                        @endif
                                     </span>
                                     {{-- Expand Button --}}
                                     <button 

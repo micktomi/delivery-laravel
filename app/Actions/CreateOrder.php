@@ -3,6 +3,7 @@
 namespace App\Actions;
 
 use App\Enums\OrderStatus;
+use App\Models\Coupon;
 use App\Models\OptionValue;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -22,12 +23,24 @@ class CreateOrder
 
     public function execute(array $checkoutData): Order
     {
-        return DB::transaction(function () use ($checkoutData) {
+        $order = DB::transaction(function () use ($checkoutData) {
             $cartItems = $this->verifiedLines();
 
             $subtotal = $this->pricing->subtotal($cartItems);
             $deliveryFee = 0.00;
-            $total = $this->pricing->total($subtotal, $deliveryFee);
+
+            // Nothing about the coupon is taken from the session or the browser
+            // beyond its code: the row is re-read, re-checked against the price
+            // the customer is actually about to pay, and claimed atomically.
+            $coupon = $this->redeemableCoupon($subtotal);
+            $totals = $this->pricing->totals($cartItems, $coupon, $deliveryFee);
+
+            if ($coupon && ! $coupon->claim()) {
+                // The last use went to someone else between validation and now.
+                Log::info('order.coupon_lost_race', ['code' => $coupon->code]);
+                $coupon = null;
+                $totals = $this->pricing->totals($cartItems, null, $deliveryFee);
+            }
 
             $displayNumber = DB::table('orders')
                 ->whereDate('created_at', today())
@@ -43,9 +56,14 @@ class CreateOrder
                 'address' => $checkoutData['address'],
                 'floor_bell' => $checkoutData['floor_bell'] ?? null,
                 'notes' => $checkoutData['notes'] ?? null,
-                'subtotal' => $subtotal,
+                'subtotal' => $totals['subtotal'],
                 'delivery_fee' => $deliveryFee,
-                'total' => $total,
+                // Snapshots: what the courier collects must survive any later
+                // edit or deletion of the coupon itself.
+                'coupon_code' => $coupon?->code,
+                'discount_amount' => $coupon ? $totals['discount'] : 0.00,
+                'coupon_id' => $coupon?->id,
+                'total' => $totals['total'],
                 'placed_at' => now(),
             ]);
 
@@ -62,18 +80,56 @@ class CreateOrder
                 ]);
             }
 
-            $this->cart->clear();
-
-            Log::info('order.created', [
-                'order_id' => $order->id,
-                'display_number' => $order->display_number,
-                'items' => count($cartItems),
-                'total' => $total,
-                'payment_method' => $order->payment_method->value,
-            ]);
-
             return $order;
         });
+
+        // Only once the order is committed: a rollback must leave the customer
+        // holding the same basket, coupon included.
+        $this->cart->clear();
+
+        Log::info('order.created', [
+            'order_id' => $order->id,
+            'display_number' => $order->display_number,
+            'items' => $order->items()->count(),
+            'total' => $order->total,
+            'coupon_code' => $order->coupon_code,
+            'discount' => $order->discount_amount,
+            'payment_method' => $order->payment_method->value,
+        ]);
+
+        return $order;
+    }
+
+    /**
+     * The coupon as it stands right now, or null if it no longer qualifies. A
+     * code that expired, was switched off or ran out between the cart and this
+     * moment costs the discount — never the order.
+     */
+    private function redeemableCoupon(float $subtotal): ?Coupon
+    {
+        $code = $this->cart->couponCode();
+
+        if ($code === null) {
+            return null;
+        }
+
+        $coupon = Coupon::findByCode($code);
+
+        if ($coupon === null) {
+            Log::info('order.coupon_dropped', ['code' => $code, 'reason' => 'unknown code']);
+
+            return null;
+        }
+
+        $reason = $coupon->rejectionReason($subtotal);
+
+        if ($reason !== null) {
+            Log::info('order.coupon_dropped', ['code' => $code, 'reason' => $reason]);
+
+            return null;
+        }
+
+        return $coupon;
     }
 
     /**

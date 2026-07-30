@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Enums\OrderStatus;
 use App\Enums\SelectionType;
 use App\Models\Category;
+use App\Models\Coupon;
 use App\Models\OptionValue;
 use App\Models\Order;
 use App\Models\Product;
@@ -31,6 +32,12 @@ class MenuPage extends Component
     public int $quantity = 1;
 
     public string $itemNotes = '';
+
+    // Coupon state. The applied code itself lives in the cart session value,
+    // not here: this is only what the customer is currently typing.
+    public string $couponInput = '';
+
+    public ?string $couponError = null;
 
     public function mount(): void
     {
@@ -193,6 +200,50 @@ class MenuPage extends Component
     }
 
     /**
+     * A rejected code leaves the cart exactly as it was — including any coupon
+     * already applied. The customer is told why, in one line.
+     */
+    public function applyCoupon(): void
+    {
+        $this->couponError = null;
+
+        $cart = app(CartService::class);
+        $code = trim($this->couponInput);
+
+        if ($code === '') {
+            $this->couponError = 'Γράψτε έναν κωδικό κουπονιού.';
+
+            return;
+        }
+
+        $coupon = Coupon::findByCode($code);
+
+        if (! $coupon) {
+            $this->couponError = 'Άγνωστος κωδικός κουπονιού.';
+
+            return;
+        }
+
+        $reason = $coupon->rejectionReason($cart->subtotal());
+
+        if ($reason !== null) {
+            $this->couponError = $reason;
+
+            return;
+        }
+
+        $cart->applyCoupon($coupon);
+        $this->couponInput = '';
+    }
+
+    public function removeCoupon(): void
+    {
+        app(CartService::class)->removeCoupon();
+        $this->couponError = null;
+        $this->couponInput = '';
+    }
+
+    /**
      * Only products that are actually on the menu can enter a cart: available,
      * and in an active category. Ids come from the browser.
      */
@@ -233,7 +284,20 @@ class MenuPage extends Component
                 ->find($this->openProductId)
             : null;
 
-        return view('livewire.menu-page', compact('categories', 'openProduct'))
-            ->layout('layouts.app');
+        $cart = app(CartService::class);
+        $totals = $cart->totals();
+        $appliedCoupon = $cart->couponCode();
+
+        // A coupon applied earlier can stop qualifying when the basket shrinks.
+        // The discount is already gone from $totals; say why rather than let it
+        // disappear silently.
+        $couponNotice = $appliedCoupon && $totals['discount'] <= 0
+            ? ($cart->coupon()?->rejectionReason($totals['subtotal'])
+                ?? 'Ο κωδικός δεν είναι πλέον διαθέσιμος.')
+            : null;
+
+        return view('livewire.menu-page', compact(
+            'categories', 'openProduct', 'totals', 'appliedCoupon', 'couponNotice',
+        ))->layout('layouts.app');
     }
 }

@@ -27,6 +27,13 @@
             </div>
         </div>
 
+        @if($droppedCouponCode)
+            <div class="w-full max-w-xs mb-6 rounded-2xl border-2 border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                Ο κωδικός {{ $droppedCouponCode }} δεν ίσχυε πλέον τη στιγμή της υποβολής.
+                Η παραγγελία καταχωρίστηκε κανονικά, χωρίς την έκπτωση.
+            </div>
+        @endif
+
         <a href="{{ route('order.track', $confirmedOrderToken) }}"
             class="w-full max-w-xs block py-4 text-white font-black text-xl rounded-2xl text-center active:scale-95 transition shadow-lg mb-3"
             style="background: var(--accent);">
@@ -70,9 +77,10 @@
                 @endif
             </div>
         @endforeach
-        <div class="px-4 py-3 flex justify-between items-baseline bg-gray-50">
-            <span class="font-bold text-base text-gray-600">Σύνολο</span>
-            <span class="font-black text-xl" style="color: var(--accent)">{{ number_format($subtotal, 2) }}€</span>
+        {{-- Subtotal, discount and total: the same partial the cart uses, with
+             no code field — the coupon is entered there, not here. --}}
+        <div class="px-4 pt-3 pb-0.5 bg-gray-50">
+            @include('livewire.partials.cart-summary', ['scope' => 'checkout', 'canApply' => false])
         </div>
     </div>
 </div>

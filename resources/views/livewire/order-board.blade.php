@@ -185,6 +185,29 @@
                                 </div>
                             @endif
 
+                            {{-- Amount to collect.
+                                 This board is the handover screen, and there is
+                                 no printed ticket: it is the only place the
+                                 courier can read what to take. Shown as three
+                                 lines, because a discounted total alone reads
+                                 as a pricing mistake. --}}
+                            <div class="mt-3 border-t-2 border-gray-200 pt-2">
+                                <div class="flex items-baseline justify-between text-sm text-gray-500">
+                                    <span class="font-semibold">Υποσύνολο</span>
+                                    <span class="font-bold">{{ number_format($order->subtotal, 2) }}€</span>
+                                </div>
+                                @if($order->hasDiscount())
+                                    <div class="flex items-baseline justify-between text-sm text-emerald-700">
+                                        <span class="font-semibold">Έκπτωση ({{ $order->coupon_code }})</span>
+                                        <span class="font-bold">−{{ number_format($order->discount_amount, 2) }}€</span>
+                                    </div>
+                                @endif
+                                <div class="flex items-baseline justify-between mt-1">
+                                    <span class="font-black text-base">Προς είσπραξη</span>
+                                    <span class="font-black text-2xl">{{ number_format($order->total, 2) }}€</span>
+                                </div>
+                            </div>
+
                             {{-- Advance button --}}
                             @if($status->nextStatus() !== null)
                                 <button

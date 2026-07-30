@@ -38,6 +38,9 @@ class CheckoutPage extends Component
 
     public ?string $confirmedOrderToken = null;
 
+    /** Set when a coupon stopped qualifying at submit: the order still went through. */
+    public ?string $droppedCouponCode = null;
+
     public function mount(): void
     {
         if (app(CartService::class)->isEmpty()) {
@@ -88,6 +91,9 @@ class CheckoutPage extends Component
             return;
         }
 
+        // Read before the order runs: a successful submit clears the cart.
+        $attemptedCoupon = app(CartService::class)->couponCode();
+
         try {
             $order = app(CreateOrder::class)->execute([
                 'customer_name' => $this->customer_name,
@@ -118,9 +124,24 @@ class CheckoutPage extends Component
 
         session()->put(self::LATEST_PUBLIC_ORDER_SESSION_KEY, $order->getRouteKey());
 
+        // A coupon lost between the cart and this moment is worth a sentence on
+        // the confirmation, not a rejected order.
+        if ($attemptedCoupon !== null && $order->coupon_code === null) {
+            $this->droppedCouponCode = $attemptedCoupon;
+        }
+
         $this->confirmedOrderNumber = $order->display_number;
         $this->confirmedOrderId = $order->id;
         $this->confirmedOrderToken = $order->getRouteKey();
+    }
+
+    /**
+     * The coupon is entered in the cart; here it can only be taken back off.
+     * There is one coupon state and it lives in the cart session value.
+     */
+    public function removeCoupon(): void
+    {
+        app(CartService::class)->removeCoupon();
     }
 
     /**
@@ -136,12 +157,22 @@ class CheckoutPage extends Component
 
     public function render()
     {
-        $cart = app(CartService::class)->items();
-        $subtotal = app(CartService::class)->subtotal();
+        $cart = app(CartService::class);
+        $totals = $cart->totals();
+        $appliedCoupon = $cart->couponCode();
+
+        // Say why a coupon shown in the cart is no longer taking anything off,
+        // rather than letting the discount line vanish on the way here.
+        $couponNotice = $appliedCoupon && $totals['discount'] <= 0
+            ? ($cart->coupon()?->rejectionReason($totals['subtotal'])
+                ?? 'Ο κωδικός δεν είναι πλέον διαθέσιμος.')
+            : null;
 
         return view('livewire.checkout-page', [
-            'cart' => $cart,
-            'subtotal' => $subtotal,
+            'cart' => $cart->items(),
+            'totals' => $totals,
+            'appliedCoupon' => $appliedCoupon,
+            'couponNotice' => $couponNotice,
             'paymentMethods' => PaymentMethod::cases(),
         ])->layout('layouts.app');
     }
