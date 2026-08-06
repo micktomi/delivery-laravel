@@ -1,7 +1,5 @@
 {{--
-    Image grid card — used only for a category where every product has an
-    uploaded photo, so image_url is never null here and there is no empty
-    <img> to guard against.
+    Canonical storefront product card.
 
     Hairline and radius, no drop shadow: a grid of shadowed cards makes the
     photos fight each other, and the border does the same job quietly.
@@ -9,11 +7,20 @@
 @php
     $available = $product->is_available;
     $hasOptions = $product->optionGroups->isNotEmpty();
+    $placeholderTints = [
+        'bg-amber-50 text-amber-700',
+        'bg-orange-50 text-orange-700',
+        'bg-rose-50 text-rose-700',
+        'bg-stone-100 text-stone-700',
+    ];
+    $categoryKey = $category->slug ?: $category->name;
+    $placeholderTint = $placeholderTints[abs(crc32($categoryKey)) % count($placeholderTints)];
 @endphp
 
 <button
     type="button"
     wire:key="card-{{ $product->id }}"
+    data-product-card="{{ $product->id }}"
     @if($available)
         wire:click="{{ $hasOptions ? 'openProduct' : 'addDirectly' }}({{ $product->id }})"
     @else
@@ -21,17 +28,34 @@
     @endif
     class="group flex flex-col overflow-hidden rounded-2xl border border-[var(--hairline)] text-left transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
 >
-    <img
-        src="{{ $product->image_url }}"
-        alt="{{ $product->name }}"
-        loading="lazy"
-        decoding="async"
-        class="aspect-square w-full object-cover"
-    >
+    @if($product->image_url)
+        <img
+            data-product-image
+            src="{{ $product->image_url }}"
+            alt="{{ $product->name }}"
+            loading="lazy"
+            decoding="async"
+            class="aspect-square w-full object-cover"
+        >
+    @else
+        <div data-product-placeholder aria-hidden="true" class="grid aspect-square w-full place-items-center {{ $placeholderTint }}">
+            <svg class="size-9 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 9h10l-1 10H8L7 9Z"/>
+                <path d="M9 9V7a3 3 0 0 1 6 0v2"/>
+                <path d="M10 13h4"/>
+            </svg>
+        </div>
+    @endif
 
     <div class="flex flex-1 flex-col p-3">
-        {{-- Fixed title height keeps a row of cards level whatever the name does. --}}
+        {{-- Fixed title and description regions keep a row of cards level. --}}
         <p class="clamp-2 min-h-[34px] text-[13.5px] font-semibold leading-snug">{{ $product->name }}</p>
+
+        <div class="mt-1 min-h-[32px]">
+            @if($product->description)
+                <p class="clamp-2 text-[12px] leading-snug text-[var(--muted)]">{{ $product->description }}</p>
+            @endif
+        </div>
 
         <div class="mt-2 flex items-center justify-between gap-2">
             <span class="price text-[15px] font-bold">

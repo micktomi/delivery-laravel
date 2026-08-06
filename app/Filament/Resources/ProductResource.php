@@ -61,7 +61,7 @@ class ProductResource extends Resource
             // is what gets uploaded — the original is reverted, not kept.
             Forms\Components\FileUpload::make('image')
                 ->label('Φωτογραφία')
-                ->helperText('Προαιρετικό — εμφανίζεται μόνο όταν όλα τα προϊόντα της κατηγορίας έχουν φωτογραφία.')
+                ->helperText('Προαιρετικό — χωρίς φωτογραφία εμφανίζεται placeholder στο public menu.')
                 ->image()
                 // HEIC is the realistic rejection here, not a corrupt file: an
                 // iPhone photo no browser will render, which would surface days

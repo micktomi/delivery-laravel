@@ -2,10 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Enums\SelectionType;
+use App\Livewire\MenuPage;
 use App\Models\Category;
+use App\Models\OptionGroup;
 use App\Models\Product;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 class ProductImageTest extends TestCase
@@ -28,45 +32,79 @@ class ProductImageTest extends TestCase
         $this->assertNull($product->image_url);
     }
 
-    public function test_a_category_uses_images_only_when_every_product_has_one(): void
-    {
-        $category = $this->category('Καφέδες');
-        $this->product('Espresso', 'products/one.jpg', $category);
-        $this->product('Cappuccino', 'products/two.jpg', $category);
-
-        $this->assertTrue($category->load('products')->uses_images);
-    }
-
-    public function test_one_product_without_an_image_drops_the_whole_category(): void
+    public function test_a_mixed_image_category_renders_one_unified_product_grid(): void
     {
         $category = $this->category('Καφέδες');
         $this->product('Espresso', 'products/one.jpg', $category);
         $this->product('Cappuccino', null, $category);
 
-        $this->assertFalse($category->load('products')->uses_images);
+        $html = Livewire::test(MenuPage::class)->html();
+
+        $this->assertSame(1, substr_count($html, 'data-product-grid'));
+        $this->assertSame(2, substr_count($html, 'data-product-card='));
+        $this->assertStringNotContainsString('wire:key="row-', $html);
+        $this->assertStringNotContainsString('<ul', $html);
     }
 
-    public function test_an_empty_category_does_not_use_images(): void
+    public function test_a_product_with_an_image_renders_its_public_url(): void
     {
-        $category = $this->category('Καφέδες');
+        Storage::fake('public');
 
-        $this->assertFalse($category->load('products')->uses_images);
+        $category = $this->category('Καφέδες');
+        $product = $this->product('Espresso', 'products/one.jpg', $category);
+
+        Livewire::test(MenuPage::class)
+            ->assertSeeHtml('data-product-image')
+            ->assertSeeHtml('src="'.Storage::disk('public')->url($product->image).'"');
     }
 
-    public function test_it_never_lazy_loads_products_to_answer(): void
+    public function test_a_product_without_an_image_renders_a_placeholder_without_an_empty_source(): void
     {
         $category = $this->category('Καφέδες');
-        $this->product('Espresso', 'products/one.jpg', $category);
+        $this->product('Espresso', null, $category);
 
-        $fresh = Category::query()->findOrFail($category->id);
+        $html = Livewire::test(MenuPage::class)->html();
 
-        $queries = 0;
-        \DB::listen(function () use (&$queries) {
-            $queries++;
-        });
+        $this->assertStringContainsString('data-product-placeholder aria-hidden="true"', $html);
+        $this->assertStringNotContainsString('src=""', $html);
+    }
 
-        $this->assertFalse($fresh->uses_images);
-        $this->assertSame(0, $queries, 'Reading uses_images lazy-loaded the products relation.');
+    public function test_the_card_preserves_description_price_and_unavailable_state(): void
+    {
+        $category = $this->category('Καφέδες');
+        $product = Product::create([
+            'category_id' => $category->id,
+            'name' => 'Cold Brew',
+            'description' => 'Με πάγο και βανίλια',
+            'base_price' => '3.40',
+            'is_available' => false,
+            'sort_order' => 0,
+        ]);
+        $product->setRelation('optionGroups', collect());
+
+        $this->view('livewire.partials.product-card', compact('product', 'category'))
+            ->assertSee('Με πάγο και βανίλια')
+            ->assertSee('3,40 €')
+            ->assertSee('Εξαντλήθηκε')
+            ->assertSeeHtml('clamp-2 text-[12px]');
+    }
+
+    public function test_products_with_options_keep_the_modal_action_and_direct_products_keep_the_add_action(): void
+    {
+        $category = $this->category('Καφέδες');
+        $configured = $this->product('Espresso', null, $category);
+        $direct = $this->product('Νερό', null, $category);
+        $group = OptionGroup::create([
+            'name' => 'Μέγεθος',
+            'selection' => SelectionType::Single->value,
+            'is_required' => false,
+            'sort_order' => 0,
+        ]);
+        $configured->optionGroups()->attach($group->id, ['sort_order' => 0]);
+
+        Livewire::test(MenuPage::class)
+            ->assertSeeHtml('wire:click="openProduct('.$configured->id.')"')
+            ->assertSeeHtml('wire:click="addDirectly('.$direct->id.')"');
     }
 
     private function category(string $name): Category

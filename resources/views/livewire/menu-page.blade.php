@@ -120,22 +120,11 @@
                         </h2>
                         <span class="price text-[12px] font-medium text-[var(--muted)]">{{ $category->products->count() }}</span>
                     </div>
-                    {{-- A category earns the image grid only once every one of its
-                         products has a photo; otherwise the text list, which is the
-                         default presentation and not a degraded card. --}}
-                    @if($category->uses_images)
-                        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-4 xl:grid-cols-4">
-                            @foreach($category->products as $product)
-                                @include('livewire.partials.product-card', ['product' => $product])
-                            @endforeach
-                        </div>
-                    @else
-                        <ul class="sm:grid sm:grid-cols-2 sm:gap-x-8">
-                            @foreach($category->products as $product)
-                                @include('livewire.partials.product-row', ['product' => $product])
-                            @endforeach
-                        </ul>
-                    @endif
+                    <div data-product-grid class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-4 xl:grid-cols-4">
+                        @foreach($category->products as $product)
+                            @include('livewire.partials.product-card', ['product' => $product, 'category' => $category])
+                        @endforeach
+                    </div>
                 </section>
             @endforeach
         </main>
