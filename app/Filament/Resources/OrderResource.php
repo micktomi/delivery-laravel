@@ -7,6 +7,7 @@ use App\Actions\TransitionOrderStatus;
 use App\Enums\OrderStatus;
 use App\Filament\Resources\OrderResource\Pages;
 use App\Models\Order;
+use App\Models\OrderItem;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Infolists;
@@ -15,6 +16,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Validation\ValidationException;
 
 class OrderResource extends Resource
@@ -143,13 +145,18 @@ class OrderResource extends Resource
                         ->formatStateUsing(fn ($state, $record) => $record->quantity.'× '.$state),
                     Infolists\Components\TextEntry::make('selected_options')
                         ->label('Επιλογές')
-                        ->formatStateUsing(function ($state) {
-                            if (empty($state)) {
+                        ->state(function (OrderItem $record): string {
+                            if (empty($record->selected_options)) {
                                 return '-';
                             }
 
-                            return collect($state)
-                                ->map(fn ($opt) => $opt['group'].': '.$opt['value'])
+                            return collect($record->selected_options)
+                                ->map(function (array $option): string {
+                                    $value = $option['value'] ?? '-';
+                                    $group = $option['group'] ?? null;
+
+                                    return filled($group) ? $group.': '.$value : $value;
+                                })
                                 ->implode(' · ');
                         }),
                     Infolists\Components\TextEntry::make('line_total')->label('Τιμή')->money('EUR'),
@@ -173,6 +180,24 @@ class OrderResource extends Resource
         ]);
     }
 
+    /**
+     * Admin record pages bind orders by their numeric id. Table actions pass
+     * the model itself to getUrl(), but Order's public route key is its token;
+     * normalize only the admin record parameter before Laravel generates it.
+     */
+    public static function getUrl(
+        string $name = 'index',
+        array $parameters = [],
+        bool $isAbsolute = true,
+        ?string $panel = null,
+        ?Model $tenant = null,
+    ): string {
+        if (($parameters['record'] ?? null) instanceof Order) {
+            $parameters['record'] = $parameters['record']->getKey();
+        }
+
+        return parent::getUrl($name, $parameters, $isAbsolute, $panel, $tenant);
+    }
     public static function getPages(): array
     {
         return [
