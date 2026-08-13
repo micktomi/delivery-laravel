@@ -37,12 +37,12 @@
      No photo. This is a takeaway menu: vertical space above the first product
      is time-to-order. The brand sits here once and collapses into the pill bar
      on scroll. --}}
-<section class="hero-gradient text-white">
-    <div class="mx-auto max-w-7xl px-4 pb-8 pt-7 lg:px-8 lg:pb-11 lg:pt-10">
-        <h1 class="font-display text-[1.7rem] font-extrabold leading-none tracking-tight lg:text-[2.6rem]">
+<section class="hero-gradient text-white lg:hidden">
+    <div class="mx-auto max-w-7xl px-4 pb-8 pt-7 lg:px-8 lg:pb-7 lg:pt-7 xl:pb-8 xl:pt-8">
+        <h1 class="font-display text-[1.7rem] font-extrabold leading-none tracking-tight lg:text-[2.25rem]">
             {{ config('app.name') }}
         </h1>
-        <p class="mt-2 text-[13px] font-medium text-white/70 lg:text-[15px]">
+        <p class="mt-2 text-[13px] font-medium text-white/70 lg:text-[14px]">
             Καφές · Sandwich · Αναψυκτικά — delivery &amp; take away
         </p>
 
@@ -66,10 +66,10 @@
      Filament, and a single row breaks silently at eight of them. --}}
 <header
     x-bind:class="stickyHeaderClass()"
-    class="sticky top-0 z-30 border-b border-[var(--hairline)] bg-white/95 backdrop-blur"
+    class="sticky top-0 z-30 border-b border-[var(--hairline)] bg-white/95 backdrop-blur lg:hidden"
 >
     <div class="mx-auto max-w-7xl px-4 lg:px-8">
-        <div class="flex items-center gap-2 py-3">
+        <div class="flex items-center gap-2 py-3 lg:gap-3 lg:py-2.5">
                 {{-- Collapsed brand mark, only once the hero has scrolled away. --}}
                 <span
                     x-cloak
@@ -77,7 +77,7 @@
                     class="font-display mr-1 hidden shrink-0 self-center text-sm font-extrabold tracking-tight lg:block"
                 >{{ config('app.name') }}</span>
 
-                <nav class="scrollbar-hide flex min-w-0 flex-1 gap-2 overflow-x-auto lg:flex-wrap lg:overflow-visible"
+                <nav class="scrollbar-hide flex min-w-0 flex-1 gap-2 overflow-x-auto lg:flex-wrap lg:gap-1.5 lg:overflow-visible"
                      style="scroll-snap-type: x mandatory;">
                     @foreach($categories as $category)
                         <a
@@ -85,7 +85,7 @@
                             data-pill="{{ $category->slug }}"
                             x-bind:class="pillClass(@js($category->slug))"
                             x-on:click.prevent="scrollToCategory(@js($category->slug))"
-                            class="shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-[13px] font-semibold transition-colors"
+                            class="shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-[13px] font-semibold transition-colors lg:px-3.5 lg:py-1.5 lg:text-[12.5px]"
                             style="scroll-snap-align: start;"
                         >{{ $category->name }}</a>
                     @endforeach
@@ -106,21 +106,68 @@
 </header>
 
 {{-- ══ MAIN SHELL: content column + desktop cart sidebar ══ --}}
-<div class="mx-auto max-w-7xl px-4 lg:flex lg:items-start lg:gap-10 lg:px-8">
+<div class="mx-auto max-w-7xl px-4 lg:grid lg:max-w-[1440px] lg:grid-cols-[248px_minmax(0,1fr)_340px] lg:items-start lg:gap-8 lg:px-8 xl:max-w-[1480px] xl:grid-cols-[264px_minmax(0,1fr)_360px] xl:gap-10">
 
-    <div class="lg:flex-1 min-w-0">
+    {{-- Desktop navigation rail. The mobile hero and horizontal category bar
+         above remain the only navigation below lg. --}}
+    <aside class="hidden lg:sticky lg:top-6 lg:block lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pr-1">
+        <div class="rounded-3xl border border-[var(--hairline)] bg-[var(--sunken)] p-4 shadow-[0_16px_38px_-30px_rgb(28_18_6_/_0.38)] lg:flex lg:min-h-full lg:flex-col xl:p-5">
+            <div class="border-b border-[var(--hairline)] pb-4">
+                <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--accent-text)]">Online ordering</p>
+                <h1 class="font-display mt-1 text-[1.45rem] font-extrabold tracking-tight">{{ config('app.name') }}</h1>
+                <p class="mt-1 text-[12px] leading-relaxed text-[var(--ink-soft)]">Καφές, snack και κάτι δροσερό — έτοιμα για delivery.</p>
+            </div>
+
+            <nav class="mt-4 space-y-1" aria-label="Κατηγορίες μενού">
+                @foreach($categories as $category)
+                    <a
+                        href="#cat-{{ $category->slug }}"
+                        x-bind:class="pillClass(@js($category->slug))"
+                        x-on:click.prevent="scrollToCategory(@js($category->slug))"
+                        class="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-[13px] font-semibold transition-colors"
+                    >
+                        <span class="truncate">{{ $category->name }}</span>
+                        <span class="price text-[11px] font-medium opacity-65">{{ $category->products->count() }}</span>
+                    </a>
+                @endforeach
+            </nav>
+
+            @if($latestTrackableOrderToken)
+                <a href="{{ route('order.track', $latestTrackableOrderToken) }}" class="mt-5 block rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12px] font-semibold leading-relaxed text-[var(--accent-text)] transition hover:bg-amber-100">
+                    Έχεις ενεργή παραγγελία<br>
+                    <span class="font-medium">Παρακολούθηση παραγγελίας →</span>
+                </a>
+            @endif
+
+            <div class="mt-auto border-t border-[var(--hairline)] pt-4 text-[11.5px] leading-relaxed text-[var(--ink-soft)]">
+                Παραλαβή από το κατάστημα ή delivery, όπως σε εξυπηρετεί.
+            </div>
+        </div>
+    </aside>
+
+    <div class="min-w-0">
+
+        {{-- Desktop content header. No search input is introduced because its
+             filtering would require new state/behavior. --}}
+        <div class="hidden border-b border-[var(--hairline)] py-7 lg:block xl:py-8">
+            <div>
+                <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--accent-text)]">Menu</p>
+                <h2 class="font-display mt-1 text-[1.7rem] font-extrabold tracking-tight">Διάλεξε τα αγαπημένα σου</h2>
+                <p class="mt-1.5 text-[13px] text-[var(--ink-soft)]">{{ $categories->count() }} κατηγορίες · φτιαγμένα την ώρα της παραγγελίας</p>
+            </div>
+        </div>
 
         {{-- ── PRODUCT LIST / GRID ── --}}
-        <main class="py-6 space-y-10 pb-36 lg:pb-12">
+        <main class="space-y-10 py-6 pb-36 lg:space-y-14 lg:py-8 lg:pb-14 xl:py-10">
             @foreach($categories as $category)
                 <section id="cat-{{ $category->slug }}" data-slug="{{ $category->slug }}" class="scroll-mt-16">
-                    <div class="mb-3 flex items-baseline gap-2.5 px-1">
-                        <h2 class="font-display text-[17px] font-extrabold tracking-tight lg:text-xl">
+                    <div class="mb-3 flex items-baseline gap-2.5 px-1 lg:mb-4">
+                        <h2 class="font-display text-[17px] font-extrabold tracking-tight lg:text-[1.35rem]">
                             {{ $category->name }}
                         </h2>
                         <span class="price text-[12px] font-medium text-[var(--muted)]">{{ $category->products->count() }}</span>
                     </div>
-                    <div data-product-grid class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-4 xl:grid-cols-4">
+                    <div data-product-grid class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-5 2xl:grid-cols-4">
                         @foreach($category->products as $product)
                             @include('livewire.partials.product-card', ['product' => $product, 'category' => $category])
                         @endforeach
@@ -131,18 +178,21 @@
     </div>
 
     {{-- ══ DESKTOP CART SIDEBAR ══ --}}
-    {{-- top-[72px] clears the sticky category bar; pt-6 lines the card up with
-         the first category heading. --}}
-    <aside class="hidden shrink-0 lg:sticky lg:top-[72px] lg:block lg:w-[330px] lg:pt-6">
-        <div class="flex flex-col overflow-hidden rounded-2xl border border-[var(--hairline)]" style="max-height: calc(100vh - 6.5rem);">
-            <div class="flex shrink-0 items-baseline justify-between border-b border-[var(--hairline)] px-4 py-3.5">
-                <h2 class="font-display text-[15px] font-extrabold tracking-tight">Η παραγγελία σου</h2>
+    {{-- The desktop offset clears the compact sticky category bar; top padding
+         keeps the panel aligned with the first category heading. --}}
+    <aside class="hidden shrink-0 lg:sticky lg:top-6 lg:block lg:w-full">
+        <div class="flex flex-col overflow-hidden rounded-2xl border border-[var(--hairline)] bg-white lg:rounded-3xl lg:shadow-[0_22px_50px_-26px_rgb(28_18_6_/_0.36)]" style="max-height: calc(100vh - 3rem);">
+            <div class="flex shrink-0 items-baseline justify-between border-b border-[var(--hairline)] bg-[var(--sunken)] px-4 py-3.5 lg:px-5 lg:py-4">
+                <div>
+                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--accent-text)]">Το καλάθι σου</p>
+                    <h2 class="font-display mt-0.5 text-[15px] font-extrabold tracking-tight lg:text-base">Η παραγγελία σου</h2>
+                </div>
                 @if($cart)
                     <span class="price text-[12px] font-medium text-[var(--muted)]">{{ $cartCountLabel }}</span>
                 @endif
             </div>
 
-            <div class="flex-1 overflow-y-auto px-4 py-2">
+            <div class="flex-1 overflow-y-auto px-4 py-2 lg:px-5 lg:py-2.5">
                 @forelse($cart as $index => $line)
                     @include('livewire.partials.cart-line', [
                         'line' => $line,
@@ -152,7 +202,7 @@
                         'compact' => true,
                     ])
                 @empty
-                    <div class="px-4 py-10 text-center">
+                    <div class="px-4 py-10 text-center lg:px-5 lg:py-8">
                         <p class="text-[13.5px] font-semibold">Άδειο καλάθι</p>
                         <p class="mt-1 text-[12px] leading-relaxed text-[var(--ink-soft)]">Διάλεξε κάτι από το μενού και θα εμφανιστεί εδώ.</p>
                     </div>
@@ -160,11 +210,11 @@
             </div>
 
             @if($cart)
-            <div class="shrink-0 border-t border-[var(--hairline)] bg-[var(--sunken)] px-4 py-4">
+            <div class="shrink-0 border-t border-[var(--hairline)] bg-[var(--sunken)] px-4 py-4 lg:px-5 lg:py-5">
                 @include('livewire.partials.cart-summary', ['scope' => 'desktop'])
                 <a
                     href="/checkout"
-                    class="block w-full rounded-xl px-4 py-3 text-center text-[14px] font-semibold text-white transition active:scale-95"
+                    class="block w-full rounded-xl px-4 py-3 text-center text-[14px] font-semibold text-white transition active:scale-95 lg:shadow-sm lg:transition-[box-shadow,filter] lg:hover:brightness-95 lg:hover:shadow-md"
                     style="background: var(--accent);"
                 >Ολοκλήρωση</a>
             </div>

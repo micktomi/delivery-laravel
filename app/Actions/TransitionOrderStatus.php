@@ -33,6 +33,12 @@ class TransitionOrderStatus
                 ]);
             }
 
+            if (in_array($fresh->status, [OrderStatus::Ready, OrderStatus::Out], true)) {
+                throw ValidationException::withMessages([
+                    'status' => 'Η παραγγελία βρίσκεται στη ροή διανομής και ενημερώνεται μόνο από τον οδηγό.',
+                ]);
+            }
+
             $next = $fresh->status->nextStatus();
 
             if ($next === null) {

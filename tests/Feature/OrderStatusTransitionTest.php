@@ -78,18 +78,19 @@ class OrderStatusTransitionTest extends TestCase
         }
     }
 
-    public function test_full_forward_path(): void
+    public function test_kitchen_forward_path_stops_when_an_order_is_ready_for_driver_claim(): void
     {
         $order = Order::factory()->status(OrderStatus::Nea)->create();
 
         foreach ([
             [OrderStatus::Nea, OrderStatus::Preparing],
             [OrderStatus::Preparing, OrderStatus::Ready],
-            [OrderStatus::Ready, OrderStatus::Out],
-            [OrderStatus::Out, OrderStatus::Completed],
         ] as [$from, $to]) {
             $this->assertSame($to, app(TransitionOrderStatus::class)->execute($order, $from)->status);
         }
+
+        $this->expectException(ValidationException::class);
+        app(TransitionOrderStatus::class)->execute($order, OrderStatus::Ready);
     }
 
     /** S5 */

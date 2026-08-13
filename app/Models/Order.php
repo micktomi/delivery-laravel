@@ -26,6 +26,7 @@ class Order extends Model
     {
         return [
             'status' => OrderStatus::class,
+            'delivery_status' => \App\Enums\DeliveryStatus::class,
             'payment_method' => PaymentMethod::class,
             'subtotal' => 'decimal:2',
             'delivery_fee' => 'decimal:2',
@@ -55,6 +56,16 @@ class Order extends Model
     public function items(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    public function driver(): BelongsTo
+    {
+        return $this->belongsTo(Driver::class);
+    }
+
+    public function driverTransitions(): HasMany
+    {
+        return $this->hasMany(OrderDriverTransition::class);
     }
 
     /**

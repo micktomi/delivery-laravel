@@ -26,7 +26,7 @@
     @else
         disabled
     @endif
-    class="group flex flex-col overflow-hidden rounded-2xl border border-[var(--hairline)] text-left transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
+    class="group flex flex-col overflow-hidden rounded-2xl border border-[var(--hairline)] text-left transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55 lg:rounded-[1.15rem] lg:transition-[border-color,box-shadow,transform] lg:duration-200 lg:hover:-translate-y-0.5 lg:hover:shadow-[0_16px_30px_-22px_rgb(28_18_6_/_0.45)]"
 >
     @if($product->image_url)
         <img
@@ -47,31 +47,31 @@
         </div>
     @endif
 
-    <div class="flex flex-1 flex-col p-3">
+    <div class="flex flex-1 flex-col p-3 lg:p-[1.125rem]">
         {{-- Fixed title and description regions keep a row of cards level. --}}
-        <p class="clamp-2 min-h-[34px] text-[13.5px] font-semibold leading-snug">{{ $product->name }}</p>
+        <p class="clamp-2 min-h-[34px] text-[13.5px] font-semibold leading-snug lg:text-[14px]">{{ $product->name }}</p>
 
-        <div class="mt-1 min-h-[32px]">
+        <div class="mt-1 min-h-[32px] lg:mt-1.5">
             @if($product->description)
-                <p class="clamp-2 text-[12px] leading-snug text-[var(--muted)]">{{ $product->description }}</p>
+                <p class="clamp-2 text-[12px] leading-snug text-[var(--muted)] lg:text-[12.5px]">{{ $product->description }}</p>
             @endif
         </div>
 
-        <div class="mt-2 flex items-center justify-between gap-2">
-            <span class="price text-[15px] font-bold">
+        <div class="mt-2 flex items-center justify-between gap-2 lg:mt-3">
+            <span class="price text-[15px] font-bold lg:text-base">
                 {{ number_format($product->base_price, 2, ',', '.') }} €
             </span>
 
             @if(! $available)
                 <span class="text-[11px] font-semibold text-[var(--ink-soft)]">Εξαντλήθηκε</span>
             @elseif($hasOptions)
-                <span class="grid size-8 shrink-0 place-items-center rounded-lg border border-[var(--hairline)] text-[var(--ink-soft)] transition group-hover:border-[var(--accent)] group-hover:text-[var(--accent)]">
+                <span class="grid size-8 shrink-0 place-items-center rounded-lg border border-[var(--hairline)] text-[var(--ink-soft)] transition group-hover:border-[var(--accent)] group-hover:text-[var(--accent)] lg:size-9 lg:rounded-xl lg:group-hover:shadow-sm">
                     <svg class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5l5 5-5 5"/></svg>
                 </span>
             @else
                 <span
                     x-bind:class="addButtonClass({{ $product->id }})"
-                    class="grid size-8 shrink-0 place-items-center rounded-lg transition"
+                    class="grid size-8 shrink-0 place-items-center rounded-lg transition lg:size-9 lg:rounded-xl lg:shadow-sm lg:group-hover:shadow-md"
                 >
                     <svg x-show="notAdded({{ $product->id }})" class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M10 5v10M5 10h10"/></svg>
                     <svg x-cloak x-show="isAdded({{ $product->id }})" class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5l4 4 8-9"/></svg>
