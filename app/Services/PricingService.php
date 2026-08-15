@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\CouponType;
 use App\Models\Coupon;
+use InvalidArgumentException;
 
 /**
  * Every figure here is computed in integer cents and only converted back to
@@ -18,6 +19,10 @@ class PricingService
 
         foreach ($selectedDeltas as $delta) {
             $unitCents += $this->cents((float) $delta);
+        }
+
+        if ($unitCents < 0) {
+            throw new InvalidArgumentException('The final unit price cannot be negative.');
         }
 
         return $this->euros($unitCents * $qty);

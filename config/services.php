@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    'viva' => [
+        'enabled' => filter_var(env('VIVA_ENABLED', false), FILTER_VALIDATE_BOOL),
+        'client_id' => env('VIVA_CLIENT_ID'),
+        'client_secret' => env('VIVA_CLIENT_SECRET'),
+        'source_code' => env('VIVA_SOURCE_CODE'),
+        'environment' => env('VIVA_ENVIRONMENT', 'demo'),
+    ],
+
 ];

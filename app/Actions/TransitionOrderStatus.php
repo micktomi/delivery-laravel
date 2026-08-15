@@ -26,6 +26,12 @@ class TransitionOrderStatus
                 ]);
             }
 
+            if (! $fresh->isReadyForFulfilment()) {
+                throw ValidationException::withMessages([
+                    'status' => 'Η online πληρωμή της παραγγελίας δεν έχει επιβεβαιωθεί.',
+                ]);
+            }
+
             if ($fresh->status !== $expected) {
                 throw ValidationException::withMessages([
                     'status' => 'Η παραγγελία #'.str_pad((string) $fresh->display_number, 3, '0', STR_PAD_LEFT)

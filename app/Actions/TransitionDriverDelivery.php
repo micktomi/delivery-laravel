@@ -30,6 +30,7 @@ class TransitionDriverDelivery
             }
 
             $claimed = Order::query()
+                ->readyForFulfilment()
                 ->whereKey($orderId)
                 ->where('status', OrderStatus::Ready->value)
                 ->whereNull('driver_id')

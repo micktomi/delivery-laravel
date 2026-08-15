@@ -17,6 +17,30 @@
 
 <div class="px-6 py-8 max-w-sm mx-auto">
 
+    @if(session('viva_status'))
+        <div class="mb-6 rounded-2xl border-2 border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-800">
+            {{ session('viva_status') }}
+        </div>
+    @endif
+
+    @if(session('viva_error'))
+        <div class="mb-6 rounded-2xl border-2 border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700">
+            {{ session('viva_error') }}
+        </div>
+    @endif
+
+    @if($order->payment_method === \App\Enums\PaymentMethod::Viva && $order->payment_status !== 'paid' && !$isCancelled)
+        <div class="mb-6 rounded-2xl border-2 border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+            <div class="font-bold">Αναμονή επιβεβαίωσης online πληρωμής.</div>
+            <div class="mt-1">Η κουζίνα θα λάβει την παραγγελία μόνο μετά την επιβεβαίωση της Viva.</div>
+            <a href="{{ route('viva.start', $order) }}"
+                class="mt-3 inline-block rounded-xl px-4 py-2 font-black text-white"
+                style="background: var(--accent);">
+                Συνέχεια στην πληρωμή
+            </a>
+        </div>
+    @endif
+
     {{-- ══ CUSTOMER ══ --}}
     <div class="bg-white rounded-2xl shadow-sm px-5 py-4 mb-8">
         <div class="font-bold text-base">{{ $order->customer_name }}</div>

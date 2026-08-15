@@ -89,6 +89,7 @@ class DriverDashboard extends Component
         $availableOrders = $activeOrder
             ? collect()
             : Order::query()
+                ->readyForFulfilment()
                 ->where('status', OrderStatus::Ready->value)
                 ->whereNull('driver_id')
                 ->whereNull('delivery_status')

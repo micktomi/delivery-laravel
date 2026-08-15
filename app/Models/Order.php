@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +18,7 @@ class Order extends Model
     // 'public_token' is not fillable: it is generated on create and never supplied.
     protected $fillable = [
         'display_number', 'status', 'payment_method',
+        'payment_status', 'checkout_token',
         'customer_name', 'phone', 'address', 'floor_bell', 'notes',
         'subtotal', 'delivery_fee', 'total', 'placed_at',
         'coupon_code', 'discount_amount', 'coupon_id',
@@ -33,6 +35,7 @@ class Order extends Model
             'total' => 'decimal:2',
             'discount_amount' => 'decimal:2',
             'placed_at' => 'datetime',
+            'paid_at' => 'datetime',
         ];
     }
 
@@ -81,5 +84,23 @@ class Order extends Model
     public function hasDiscount(): bool
     {
         return (float) $this->discount_amount > 0;
+    }
+
+    /**
+     * Unconfirmed online orders must not reach the kitchen or a courier.
+     * Cash and pay-on-delivery card orders retain their existing behaviour.
+     */
+    public function scopeReadyForFulfilment(Builder $query): Builder
+    {
+        return $query->where(function (Builder $query): void {
+            $query->where('payment_method', '!=', PaymentMethod::Viva->value)
+                ->orWhere('payment_status', 'paid');
+        });
+    }
+
+    public function isReadyForFulfilment(): bool
+    {
+        return $this->payment_method !== PaymentMethod::Viva
+            || $this->payment_status === 'paid';
     }
 }

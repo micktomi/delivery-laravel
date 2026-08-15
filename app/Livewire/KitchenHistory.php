@@ -12,22 +12,22 @@ class KitchenHistory extends Component
         $today = today();
 
         // 1. Calculate top metrics for today
-        $totalOrdersCount = Order::whereDate('created_at', $today)->count();
+        $totalOrdersCount = Order::readyForFulfilment()->whereDate('created_at', $today)->count();
 
-        $completedOrSentCount = Order::whereDate('created_at', $today)
+        $completedOrSentCount = Order::readyForFulfilment()->whereDate('created_at', $today)
             ->whereIn('status', ['completed', 'out'])
             ->count();
 
-        $cancelledCount = Order::whereDate('created_at', $today)
+        $cancelledCount = Order::readyForFulfilment()->whereDate('created_at', $today)
             ->where('status', 'cancelled')
             ->count();
 
-        $dailyRevenue = (float) Order::whereDate('created_at', $today)
+        $dailyRevenue = (float) Order::readyForFulfilment()->whereDate('created_at', $today)
             ->where('status', '!=', 'cancelled')
             ->sum('total');
 
         // 2. Fetch today's orders that are out, completed, or cancelled, eager loading items
-        $orders = Order::whereDate('created_at', $today)
+        $orders = Order::readyForFulfilment()->whereDate('created_at', $today)
             ->whereIn('status', ['out', 'completed', 'cancelled'])
             ->with('items')
             ->orderBy('placed_at', 'desc')

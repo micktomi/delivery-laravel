@@ -81,6 +81,7 @@ class ProductResource extends Resource
             Forms\Components\TextInput::make('base_price')
                 ->label('Βασική Τιμή (€)')
                 ->numeric()
+                ->minValue(0)
                 ->prefix('€')
                 ->required(),
             Forms\Components\Toggle::make('is_available')

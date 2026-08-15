@@ -16,7 +16,7 @@ class OrderBoard extends Component
 
     public function mount(): void
     {
-        $this->lastSeenOrderId = (int) Order::max('id');
+        $this->lastSeenOrderId = (int) Order::readyForFulfilment()->max('id');
     }
 
     /**
@@ -28,7 +28,7 @@ class OrderBoard extends Component
         $order = Order::find($orderId);
         $expected = OrderStatus::tryFrom($expectedStatus);
 
-        if (! $order || ! $expected) {
+        if (! $order || ! $expected || ! $order->isReadyForFulfilment()) {
             $this->addError('board', 'Η παραγγελία δεν βρέθηκε. Ο πίνακας ανανεώθηκε.');
 
             return;
@@ -72,14 +72,14 @@ class OrderBoard extends Component
             $columns[$status->value] = [
                 'status' => $status,
                 'orders' => Order::where('status', $status->value)
-                    ->whereDate('created_at', today())
+                    ->readyForFulfilment()
                     ->with('items')
                     ->orderBy('placed_at')
                     ->get(),
             ];
         }
 
-        $currentMaxId = (int) Order::max('id');
+        $currentMaxId = (int) Order::readyForFulfilment()->max('id');
         $hasNewOrders = $currentMaxId > $this->lastSeenOrderId;
 
         if ($hasNewOrders) {

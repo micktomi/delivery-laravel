@@ -38,7 +38,7 @@ class CreateOrderTest extends TestCase
         ]);
     }
 
-    private function optionValue(string $name = 'Διπλός', string $delta = '0.70'): OptionValue
+    private function optionValue(Product $product, string $name = 'Διπλός', string $delta = '0.70'): OptionValue
     {
         $group = OptionGroup::create([
             'name' => 'Μέγεθος / Δόση',
@@ -47,13 +47,17 @@ class CreateOrderTest extends TestCase
             'sort_order' => 0,
         ]);
 
-        return OptionValue::create([
+        $value = OptionValue::create([
             'option_group_id' => $group->id,
             'name' => $name,
             'price_delta' => $delta,
             'is_default' => false,
             'sort_order' => 0,
         ]);
+
+        $product->optionGroups()->attach($group->id, ['sort_order' => 0]);
+
+        return $value;
     }
 
     private function checkoutData(array $overrides = []): array
@@ -89,7 +93,7 @@ class CreateOrderTest extends TestCase
     {
         $freddo = $this->product('Freddo Espresso', '2.80');
         $cappuccino = $this->product('Cappuccino Freddo', '3.00');
-        $double = $this->optionValue();
+        $double = $this->optionValue($freddo);
 
         $line1 = $this->addCartLine($freddo, [
             'selected_options' => [[
@@ -272,7 +276,7 @@ class CreateOrderTest extends TestCase
     public function test_option_price_is_taken_from_the_catalogue(): void
     {
         $product = $this->product('Freddo Espresso', '2.80');
-        $double = $this->optionValue('Διπλός', '0.70');
+        $double = $this->optionValue($product, 'Διπλός', '0.70');
 
         $this->addCartLine($product, [
             'selected_options' => [[

@@ -12,6 +12,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->validateCsrfTokens(except: [
+            'payments/viva/webhook',
+        ]);
+
         $middleware->redirectGuestsTo(fn (Request $request) => $request->is('driver', 'driver/*')
             ? route('driver.login')
             : route('filament.admin.auth.login'));
