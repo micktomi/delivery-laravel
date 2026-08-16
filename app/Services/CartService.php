@@ -50,6 +50,24 @@ class CartService
         $this->putLines($cart);
     }
 
+    public function adjustQuantity(int $index, int $delta): void
+    {
+        $cart = $this->items();
+        if (! isset($cart[$index])) {
+            return;
+        }
+
+        $qty = (int) $cart[$index]['quantity'] + $delta;
+
+        if ($qty < 1) {
+            $this->remove($index);
+
+            return;
+        }
+
+        $this->update($index, $qty);
+    }
+
     public function remove(int $index): void
     {
         $cart = $this->items();

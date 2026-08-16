@@ -6,7 +6,7 @@
     did not contain them.
 
     $line      — the cart line
-    $index     — its position, the argument updateQty/removeFromCart expect
+    $index     — its position, the argument the cart actions expect
     $key       — stable identity, see the signature built in menu-page
     $scope     — 'desktop' or 'mobile'; keys must not collide between the copies
     $compact   — the desktop sidebar, which has less room than the mobile sheet
@@ -49,11 +49,11 @@
     </div>
 
     <div class="mt-2 flex items-center {{ $compact ? 'gap-1' : 'gap-1.5' }}">
-        {{-- updateQty routes a quantity of 0 to removeFromCart server-side, so
-             one control covers both decrement and delete. --}}
+        {{-- Send intent only: the server applies it to the latest cart state.
+             Decrementing one follows the existing remove-at-zero behavior. --}}
         <button
             type="button"
-            wire:click="updateQty({{ $index }}, {{ $line['quantity'] - 1 }})"
+            wire:click="decrementQty({{ $index }})"
             aria-label="Μείωση ποσότητας"
             class="grid {{ $compact ? 'size-7' : 'size-9' }} place-items-center rounded-md border border-[var(--hairline)] text-[var(--ink-soft)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] active:scale-90"
         >
@@ -64,7 +64,7 @@
 
         <button
             type="button"
-            wire:click="updateQty({{ $index }}, {{ $line['quantity'] + 1 }})"
+            wire:click="incrementQty({{ $index }})"
             aria-label="Αύξηση ποσότητας"
             class="grid {{ $compact ? 'size-7' : 'size-9' }} place-items-center rounded-md border border-[var(--hairline)] text-[var(--ink-soft)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] active:scale-90"
         >

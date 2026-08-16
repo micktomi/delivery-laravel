@@ -192,9 +192,26 @@ class MenuPage extends Component
         $this->dispatch('cart-updated', cart: $this->cart, count: count($this->cart));
     }
 
+    public function incrementQty(int $index): void
+    {
+        $this->adjustQty($index, 1);
+    }
+
+    public function decrementQty(int $index): void
+    {
+        $this->adjustQty($index, -1);
+    }
+
     public function removeFromCart(int $index): void
     {
         app(CartService::class)->remove($index);
+        $this->cart = app(CartService::class)->items();
+        $this->dispatch('cart-updated', cart: $this->cart, count: count($this->cart));
+    }
+
+    private function adjustQty(int $index, int $delta): void
+    {
+        app(CartService::class)->adjustQuantity($index, $delta);
         $this->cart = app(CartService::class)->items();
         $this->dispatch('cart-updated', cart: $this->cart, count: count($this->cart));
     }

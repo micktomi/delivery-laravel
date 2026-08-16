@@ -86,6 +86,49 @@ class CartQuantityTest extends TestCase
         $this->assertSame([], app(CartService::class)->items(), 'qty < 1 removes the line');
     }
 
+    public function test_ten_rapid_increment_intents_are_all_applied(): void
+    {
+        $product = $this->product();
+
+        $component = Livewire::test(MenuPage::class)
+            ->call('addDirectly', $product->id)
+            ->assertSeeHtml('wire:click="incrementQty(0)"')
+            ->assertSeeHtml('wire:click="decrementQty(0)"');
+
+        for ($tap = 0; $tap < 10; $tap++) {
+            $component->call('incrementQty', 0);
+        }
+
+        $line = app(CartService::class)->items()[0];
+
+        $this->assertSame(11, $line['quantity']);
+        $this->assertEquals(22.00, $line['line_total']);
+    }
+
+    public function test_rapid_decrement_intents_remove_the_line_at_zero(): void
+    {
+        $product = $this->product();
+
+        $component = Livewire::test(MenuPage::class)
+            ->call('addDirectly', $product->id);
+
+        for ($tap = 0; $tap < 3; $tap++) {
+            $component->call('incrementQty', 0);
+        }
+
+        for ($tap = 0; $tap < 3; $tap++) {
+            $component->call('decrementQty', 0);
+        }
+
+        $this->assertSame(1, app(CartService::class)->items()[0]['quantity']);
+
+        $component->call('decrementQty', 0);
+        $this->assertSame([], app(CartService::class)->items());
+
+        $component->call('decrementQty', 0);
+        $this->assertSame([], app(CartService::class)->items(), 'a stale decrement after removal is a no-op');
+    }
+
     public function test_unavailable_product_cannot_be_added(): void
     {
         $product = $this->product(available: false);
