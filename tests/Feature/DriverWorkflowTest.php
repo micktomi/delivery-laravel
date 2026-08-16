@@ -42,6 +42,36 @@ class DriverWorkflowTest extends TestCase
             ->assertRedirect(route('driver.login'));
     }
 
+    public function test_active_delivery_has_call_and_address_only_navigation_actions(): void
+    {
+        $driver = Driver::factory()->create();
+        $address = 'Λεωφόρος Κηφισίας 10, Αθήνα';
+        $notes = 'Χτύπησε το πλαϊνό κουδούνι & περίμενε';
+        $order = Order::factory()->status(OrderStatus::Ready)->create([
+            'phone' => '+30 210 123 4567',
+            'address' => $address,
+            'floor_bell' => '3ος όροφος',
+            'notes' => $notes,
+            'total' => '42.75',
+        ]);
+        app(TransitionDriverDelivery::class)->claim($order->id, $driver);
+
+        $html = Livewire::actingAs($driver, 'driver')
+            ->test(DriverDashboard::class)
+            ->html();
+
+        $mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination='.rawurlencode($address);
+
+        $this->assertStringContainsString('href="tel:+302101234567"', $html);
+        $this->assertStringContainsString('📞 Κλήση', $html);
+        $this->assertStringContainsString('📍 Πλοήγηση', $html);
+        $this->assertStringContainsString('href="'.e($mapsUrl).'"', $html);
+        $this->assertStringNotContainsString(rawurlencode($notes), $mapsUrl);
+        $this->assertStringContainsString(e($notes), $html);
+        $this->assertStringContainsString('42,75 €', $html);
+        $this->assertStringContainsString('Παρέλαβα την παραγγελία', $html);
+    }
+
     public function test_dashboard_claim_uses_the_authenticated_driver_not_frontend_input(): void
     {
         $driver = Driver::factory()->create();

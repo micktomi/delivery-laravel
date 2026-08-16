@@ -229,13 +229,17 @@ class KitchenBoardResponsiveTest extends TestCase
         $this->assertStringContainsString('w-full min-w-0 bg-white', $html);
     }
 
-    /** Long Greek addresses and product names have to wrap, not clip. */
-    public function test_customer_and_item_text_is_wrappable(): void
+    /** Prep details stay readable while courier and financial data stay off the board. */
+    public function test_kitchen_cards_keep_prep_details_and_hide_logistics_and_financials(): void
     {
         $order = Order::factory()->status(OrderStatus::Nea)->create([
             'customer_name' => 'Κωνσταντίνος Παπαδόπουλος-Αναγνωστόπουλος',
-            'address' => 'Λεωφόρος Κωνσταντινουπόλεως 148, 3ος όροφος, Θεσσαλονίκη',
+            'phone' => '6912345678',
+            'address' => 'Λεωφόρος Κωνσταντινουπόλεως 148, Θεσσαλονίκη',
+            'floor_bell' => '3ος όροφος · κουδούνι Παπαδόπουλος',
             'notes' => 'Χωρίς ζάχαρη σε όλα τα ροφήματα παρακαλώ πολύ',
+            'subtotal' => '91.23',
+            'total' => '98.76',
         ]);
 
         OrderItem::create([
@@ -253,20 +257,30 @@ class KitchenBoardResponsiveTest extends TestCase
 
         foreach ([
             'Κωνσταντίνος Παπαδόπουλος-Αναγνωστόπουλος',
-            'Λεωφόρος Κωνσταντινουπόλεως 148, 3ος όροφος, Θεσσαλονίκη',
-            'Sandwich Μπαγκέτα Κοτόπουλο Καπνιστό',
+            '2× Sandwich Μπαγκέτα Κοτόπουλο Καπνιστό',
             'Χωρίς μαγιονέζα',
+            'Ζεστό',
+            'Χωρίς ζάχαρη σε όλα τα ροφήματα παρακαλώ πολύ',
         ] as $text) {
             $this->assertStringContainsString(e($text), $html);
         }
 
-        // Every one of those lines is rendered with break-words.
+        foreach ([
+            '6912345678',
+            'Λεωφόρος Κωνσταντινουπόλεως 148, Θεσσαλονίκη',
+            '3ος όροφος · κουδούνι Παπαδόπουλος',
+            'Υποσύνολο',
+            'Προς είσπραξη',
+            '98.76€',
+        ] as $text) {
+            $this->assertStringNotContainsString(e($text), $html);
+        }
+
         foreach ([
             'Κωνσταντίνος Παπαδόπουλος-Αναγνωστόπουλος',
-            'Λεωφόρος Κωνσταντινουπόλεως 148, 3ος όροφος, Θεσσαλονίκη',
             'Sandwich Μπαγκέτα Κοτόπουλο Καπνιστό',
+            'Χωρίς μαγιονέζα',
         ] as $text) {
-            // [^<]* rather than \s*: the item line is prefixed with its quantity.
             $this->assertMatchesRegularExpression(
                 '/class="[^"]*break-words[^"]*"[^>]*>[^<]*'.preg_quote(e($text), '/').'/s',
                 $html,
@@ -284,8 +298,8 @@ class KitchenBoardResponsiveTest extends TestCase
 
         $board->assertSee('ΕΤΟΙΜΑΖΕΤΑΙ');
         $board->assertSee('Ακύρωση');
-        // w-full plus horizontal padding, so a long Greek label wraps in place
-        // rather than widening the button past the card.
-        $board->assertSeeHtml('mt-3 w-full px-2 py-3');
+        $board->assertSeeHtml('data-kitchen-card');
+        $board->assertSeeHtml('min-h-11 min-w-0 flex-[2]');
+        $board->assertSeeHtml('min-h-11 flex-[1]');
     }
 }

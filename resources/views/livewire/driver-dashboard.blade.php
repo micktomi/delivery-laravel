@@ -15,6 +15,10 @@
         @enderror
 
         @if($activeOrder)
+            @php
+                $dialPhone = preg_replace('/[^\d+]/', '', $activeOrder->phone);
+                $mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination='.rawurlencode($activeOrder->address);
+            @endphp
             <section class="overflow-hidden rounded-3xl border border-[var(--hairline)] bg-white shadow-[0_18px_40px_-28px_rgb(28_18_6_/_0.35)]">
                 <div class="border-b border-[var(--hairline)] bg-[var(--accent-light)] px-5 py-4">
                     <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--accent-text)]">Ενεργή διανομή</p>
@@ -27,11 +31,23 @@
                 <div class="space-y-4 px-5 py-5">
                     <div>
                         <p class="font-semibold">{{ $activeOrder->customer_name }}</p>
-                        <a href="tel:{{ $activeOrder->phone }}" class="mt-0.5 block text-sm text-[var(--ink-soft)]">{{ $activeOrder->phone }}</a>
+                        <a href="tel:{{ $dialPhone }}" class="mt-0.5 block text-sm text-[var(--ink-soft)]">{{ $activeOrder->phone }}</a>
                         <p class="mt-2 text-sm leading-relaxed text-[var(--ink-soft)]">{{ $activeOrder->address }}</p>
                         @if($activeOrder->floor_bell)
                             <p class="mt-0.5 text-sm text-[var(--ink-soft)]">{{ $activeOrder->floor_bell }}</p>
                         @endif
+                        @if($activeOrder->notes)
+                            <p class="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm leading-snug text-amber-900">Οδηγίες: {{ $activeOrder->notes }}</p>
+                        @endif
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <a href="tel:{{ $dialPhone }}" class="flex min-h-11 items-center justify-center rounded-xl border border-[var(--accent)] px-3 py-2 text-sm font-semibold" style="color: var(--accent);">
+                            📞 Κλήση
+                        </a>
+                        <a href="{{ $mapsUrl }}" target="_blank" rel="noopener noreferrer" class="flex min-h-11 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold text-white" style="background: var(--accent);">
+                            📍 Πλοήγηση
+                        </a>
                     </div>
 
                     <div class="border-y border-[var(--hairline)] py-3 text-sm">

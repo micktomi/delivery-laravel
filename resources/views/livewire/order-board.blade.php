@@ -176,117 +176,81 @@
                 </div>
 
                 {{-- Order cards --}}
-                <div class="p-2 space-y-3 md:flex-1 md:overflow-y-auto">
+                <div class="p-2 space-y-2 md:flex-1 md:overflow-y-auto">
                     @forelse($orders as $order)
-                        <div class="w-full min-w-0 bg-white rounded-2xl shadow-md border-l-[6px]
+                        <div data-kitchen-card class="w-full min-w-0 bg-white rounded-xl shadow-sm border-l-4
                             @if($status->value === 'nea')       border-yellow-400
                             @elseif($status->value === 'preparing') border-blue-400
                             @elseif($status->value === 'ready')     border-green-400
                             @elseif($status->value === 'out')       border-purple-400
                             @endif
-                            p-4"
+                            p-3"
                         >
                             {{-- Order number + time --}}
-                            <div class="flex items-baseline justify-between gap-2 mb-2">
-                                <span class="min-w-0 font-black text-3xl leading-none">
+                            <div class="mb-1 flex items-baseline justify-between gap-2">
+                                <span class="min-w-0 text-2xl font-black leading-none">
                                     #{{ str_pad($order->display_number, 3, '0', STR_PAD_LEFT) }}
                                 </span>
-                                <span class="shrink-0 text-sm text-gray-400 font-medium">{{ $order->placed_at->format('H:i') }}</span>
+                                <span class="shrink-0 text-xs font-semibold text-gray-400">{{ $order->placed_at->format('H:i') }}</span>
                             </div>
 
-                            {{-- Customer --}}
-                            <div class="font-bold text-base leading-snug break-words">{{ $order->customer_name }}</div>
-                            <div class="text-sm text-gray-600 break-words">{{ $order->phone }}</div>
-                            <div class="text-sm text-gray-700 mt-0.5 leading-tight break-words">{{ $order->address }}</div>
-                            @if($order->floor_bell)
-                                <div class="text-sm text-gray-500 break-words">{{ $order->floor_bell }}</div>
-                            @endif
+                            {{-- Compact handover identity; logistics belong on the driver screen. --}}
+                            <div class="break-words text-sm font-bold leading-tight text-gray-700">{{ $order->customer_name }}</div>
 
-                            {{-- Payment badge --}}
-                            <div class="mt-2 mb-3">
-                                <span class="inline-block max-w-full text-sm font-bold px-3 py-1 rounded-full break-words
-                                    {{ $order->payment_method->value === 'cash'
-                                        ? 'bg-green-100 text-green-800'
-                                        : 'bg-blue-100 text-blue-800' }}">
-                                    {{ $order->payment_method->getLabel() }}
-                                </span>
-                            </div>
-
-                            {{-- Items --}}
-                            <div class="space-y-2 border-t border-gray-100 pt-2">
+                            {{-- Preparation details --}}
+                            <div class="mt-2 space-y-1.5 border-t border-gray-100 pt-2">
                                 @foreach($order->items as $item)
-                                    <div class="min-w-0">
-                                        <div class="font-semibold text-base break-words">
+                                    <div class="min-w-0 border-b border-gray-100 pb-1.5 last:border-0 last:pb-0">
+                                        <div class="break-words text-sm font-semibold leading-tight">
                                             {{ $item->quantity }}× {{ $item->product_name }}
                                         </div>
                                         @if(!empty($item->selected_options))
-                                            <div class="text-sm text-gray-500 pl-3 leading-snug break-words">
+                                            <div class="mt-0.5 break-words pl-2 text-xs leading-snug text-gray-500">
                                                 · {{ collect($item->selected_options)->pluck('value')->implode(' · ') }}
                                             </div>
                                         @endif
                                         @if($item->notes)
-                                            <div class="text-sm text-amber-700 pl-3 break-words">📝 {{ $item->notes }}</div>
+                                            <div class="mt-0.5 break-words pl-2 text-xs leading-snug text-amber-700">📝 {{ $item->notes }}</div>
                                         @endif
                                     </div>
                                 @endforeach
                             </div>
 
                             @if($order->notes)
-                                <div class="text-sm text-amber-800 mt-2 bg-amber-50 rounded-lg px-3 py-2 break-words">
+                                <div class="mt-2 break-words rounded-md bg-amber-50 px-2.5 py-1.5 text-xs font-medium leading-snug text-amber-800">
                                     📝 {{ $order->notes }}
                                 </div>
                             @endif
 
-                            {{-- Amount to collect.
-                                 This board is the handover screen, and there is
-                                 no printed ticket: it is the only place the
-                                 courier can read what to take. Shown as three
-                                 lines, because a discounted total alone reads
-                                 as a pricing mistake. --}}
-                            <div class="mt-3 border-t-2 border-gray-200 pt-2">
-                                <div class="flex items-baseline justify-between gap-2 text-sm text-gray-500">
-                                    <span class="min-w-0 font-semibold">Υποσύνολο</span>
-                                    <span class="shrink-0 font-bold">{{ number_format($order->subtotal, 2) }}€</span>
-                                </div>
-                                @if($order->hasDiscount())
-                                    <div class="flex items-baseline justify-between gap-2 text-sm text-emerald-700">
-                                        <span class="min-w-0 font-semibold break-words">Έκπτωση ({{ $order->coupon_code }})</span>
-                                        <span class="shrink-0 font-bold">−{{ number_format($order->discount_amount, 2) }}€</span>
-                                    </div>
+                            <div class="mt-2 flex items-stretch gap-2 border-t border-gray-100 pt-2">
+                                {{-- Advance button --}}
+                                @if($status->nextStatus() !== null)
+                                    <button
+                                        wire:click="advance({{ $order->id }}, '{{ $status->value }}')"
+                                        wire:loading.attr="disabled"
+                                        wire:target="advance({{ $order->id }}, '{{ $status->value }}')"
+                                        class="min-h-11 min-w-0 flex-[2] break-words rounded-lg px-2 py-2 text-sm font-black transition active:scale-95
+                                            @if($status->value === 'nea')       bg-blue-500   hover:bg-blue-600   text-white
+                                            @elseif($status->value === 'preparing') bg-green-500  hover:bg-green-600  text-white
+                                            @elseif($status->value === 'ready')     bg-purple-500 hover:bg-purple-600 text-white
+                                            @endif"
+                                        x-on:click="if (alerting) stopAlert()"
+                                    >
+                                        → {{ $status->nextStatus()->getLabel() }}
+                                    </button>
                                 @endif
-                                <div class="flex items-baseline justify-between gap-2 mt-1">
-                                    <span class="min-w-0 font-black text-base">Προς είσπραξη</span>
-                                    <span class="shrink-0 font-black text-2xl">{{ number_format($order->total, 2) }}€</span>
-                                </div>
-                            </div>
 
-                            {{-- Advance button --}}
-                            @if($status->nextStatus() !== null)
+                                {{-- Cancel --}}
                                 <button
-                                    wire:click="advance({{ $order->id }}, '{{ $status->value }}')"
+                                    wire:click="cancel({{ $order->id }})"
                                     wire:loading.attr="disabled"
-                                    wire:target="advance({{ $order->id }}, '{{ $status->value }}')"
-                                    class="mt-3 w-full px-2 py-3 text-base font-black rounded-xl transition active:scale-95 break-words
-                                        @if($status->value === 'nea')       bg-blue-500   hover:bg-blue-600   text-white
-                                        @elseif($status->value === 'preparing') bg-green-500  hover:bg-green-600  text-white
-                                        @elseif($status->value === 'ready')     bg-purple-500 hover:bg-purple-600 text-white
-                                        @endif"
-                                    x-on:click="if (alerting) stopAlert()"
+                                    wire:target="cancel({{ $order->id }})"
+                                    wire:confirm="Ακύρωση της παραγγελίας #{{ str_pad($order->display_number, 3, '0', STR_PAD_LEFT) }};"
+                                    class="min-h-11 flex-[1] rounded-lg border border-gray-200 px-2 py-2 text-xs font-bold text-gray-400 transition hover:border-red-300 hover:text-red-600"
                                 >
-                                    → {{ $status->nextStatus()->getLabel() }}
+                                    Ακύρωση
                                 </button>
-                            @endif
-
-                            {{-- Cancel --}}
-                            <button
-                                wire:click="cancel({{ $order->id }})"
-                                wire:loading.attr="disabled"
-                                wire:target="cancel({{ $order->id }})"
-                                wire:confirm="Ακύρωση της παραγγελίας #{{ str_pad($order->display_number, 3, '0', STR_PAD_LEFT) }};"
-                                class="mt-2 w-full py-2 text-sm font-bold rounded-xl border-2 border-gray-200 text-gray-400 hover:border-red-300 hover:text-red-600 transition"
-                            >
-                                Ακύρωση
-                            </button>
+                            </div>
                         </div>
                     @empty
                         <div class="flex items-center justify-center h-20 md:h-32 text-gray-300 text-2xl">—</div>

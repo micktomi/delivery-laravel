@@ -428,11 +428,7 @@ class OrderCouponTest extends TestCase
         $this->assertSame('10.00', $order->total);
     }
 
-    /**
-     * The board is the handover screen and there is no printed ticket, so it is
-     * the only place the courier can read the amount to collect.
-     */
-    public function test_the_kitchen_board_shows_the_amount_to_collect(): void
+    public function test_the_kitchen_board_hides_financial_details(): void
     {
         $product = $this->product('12.40');
         $coupon = Coupon::factory()->percentage('15.00')->create(['code' => 'WELCOME15']);
@@ -442,41 +438,11 @@ class OrderCouponTest extends TestCase
         $this->placeOrder();
 
         Livewire::test(OrderBoard::class)
-            ->assertSee('Υποσύνολο')
-            ->assertSee('12.40€')
-            ->assertSee('Έκπτωση (WELCOME15)')
-            ->assertSee('1.86€')
-            ->assertSee('Προς είσπραξη')
-            ->assertSee('10.54€');
-    }
-
-    public function test_the_kitchen_board_shows_the_amount_on_an_undiscounted_order_too(): void
-    {
-        $this->addLine($this->product('12.40'));
-        $this->placeOrder();
-
-        Livewire::test(OrderBoard::class)
-            ->assertSee('Προς είσπραξη')
-            ->assertSee('12.40€')
-            ->assertDontSee('Έκπτωση');
-    }
-
-    public function test_the_board_amount_is_the_snapshot_not_a_live_coupon_read(): void
-    {
-        $product = $this->product('12.40');
-        $coupon = Coupon::factory()->percentage('15.00')->create(['code' => 'WELCOME15']);
-
-        $this->addLine($product);
-        $this->cart()->applyCoupon($coupon);
-        $this->placeOrder();
-
-        $coupon->update(['value' => '50.00']);
-        $coupon->delete();
-
-        Livewire::test(OrderBoard::class)
-            ->assertSee('Έκπτωση (WELCOME15)')
-            ->assertSee('1.86€')
-            ->assertSee('10.54€');
+            ->assertDontSee('Υποσύνολο')
+            ->assertDontSee('Έκπτωση (WELCOME15)')
+            ->assertDontSee('Προς είσπραξη')
+            ->assertDontSee('12.40€')
+            ->assertDontSee('10.54€');
     }
 
     public function test_the_tracking_page_shows_subtotal_discount_and_total(): void
