@@ -167,7 +167,7 @@
                         </h2>
                         <span class="price text-[12px] font-medium text-[var(--muted)]">{{ $category->products->count() }}</span>
                     </div>
-                    <div data-product-grid class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-5 2xl:grid-cols-4">
+                    <div data-product-grid class="grid grid-cols-1 gap-0 sm:grid-cols-3 sm:gap-3 lg:gap-5 2xl:grid-cols-4">
                         @foreach($category->products as $product)
                             @include('livewire.partials.product-card', ['product' => $product, 'category' => $category])
                         @endforeach

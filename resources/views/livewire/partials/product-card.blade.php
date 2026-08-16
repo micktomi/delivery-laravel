@@ -1,9 +1,4 @@
-{{--
-    Canonical storefront product card.
-
-    Hairline and radius, no drop shadow: a grid of shadowed cards makes the
-    photos fight each other, and the border does the same job quietly.
---}}
+{{-- Canonical storefront product: compact row on phones, existing card from sm up. --}}
 @php
     $available = $product->is_available;
     $hasOptions = $product->optionGroups->isNotEmpty();
@@ -26,7 +21,7 @@
     @else
         disabled
     @endif
-    class="group flex flex-col overflow-hidden rounded-2xl border border-[var(--hairline)] text-left transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55 lg:rounded-[1.15rem] lg:transition-[border-color,box-shadow,transform] lg:duration-200 lg:hover:-translate-y-0.5 lg:hover:shadow-[0_16px_30px_-22px_rgb(28_18_6_/_0.45)]"
+    class="group relative flex w-full items-center gap-3 overflow-visible border-b border-[var(--hairline)] py-3 text-left transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55 sm:flex-col sm:items-stretch sm:gap-0 sm:overflow-hidden sm:rounded-2xl sm:border sm:py-0 lg:rounded-[1.15rem] lg:transition-[border-color,box-shadow,transform] lg:duration-200 lg:hover:-translate-y-0.5 lg:hover:shadow-[0_16px_30px_-22px_rgb(28_18_6_/_0.45)]"
 >
     @if($product->image_url)
         <img
@@ -35,11 +30,11 @@
             alt="{{ $product->name }}"
             loading="lazy"
             decoding="async"
-            class="aspect-square w-full object-cover"
+            class="order-2 size-[76px] shrink-0 rounded-2xl object-cover sm:order-none sm:aspect-square sm:h-auto sm:w-full sm:rounded-none"
         >
     @else
-        <div data-product-placeholder aria-hidden="true" class="grid aspect-square w-full place-items-center {{ $placeholderTint }}">
-            <svg class="size-9 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <div data-product-placeholder aria-hidden="true" class="order-2 grid size-[76px] shrink-0 place-items-center rounded-2xl {{ $placeholderTint }} sm:order-none sm:aspect-square sm:h-auto sm:w-full sm:rounded-none">
+            <svg class="size-7 opacity-70 sm:size-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M7 9h10l-1 10H8L7 9Z"/>
                 <path d="M9 9V7a3 3 0 0 1 6 0v2"/>
                 <path d="M10 13h4"/>
@@ -47,15 +42,17 @@
         </div>
     @endif
 
-    <div class="flex flex-1 flex-col p-3 lg:p-[1.125rem]">
-        {{-- Fixed title and description regions keep a row of cards level. --}}
-        <p class="clamp-2 min-h-[34px] text-[13.5px] font-semibold leading-snug lg:text-[14px]">{{ $product->name }}</p>
+    <div class="order-1 flex min-w-0 flex-1 flex-col pr-1 sm:order-none sm:p-3 lg:p-[1.125rem]">
+        <p class="clamp-2 text-[15px] font-semibold leading-snug sm:min-h-[34px] sm:text-[13.5px] lg:text-[14px]">{{ $product->name }}</p>
 
-        <div class="mt-1 min-h-[32px] lg:mt-1.5">
-            @if($product->description)
+        @if($product->description)
+            <div class="mt-1 sm:min-h-[32px] lg:mt-1.5">
                 <p class="clamp-2 text-[12px] leading-snug text-[var(--muted)] lg:text-[12.5px]">{{ $product->description }}</p>
-            @endif
-        </div>
+            </div>
+        @else
+            {{-- Preserve equal-height cards above mobile without reserving row space. --}}
+            <div aria-hidden="true" class="hidden sm:mt-1 sm:block sm:min-h-[32px] lg:mt-1.5"></div>
+        @endif
 
         <div class="mt-2 flex items-center justify-between gap-2 lg:mt-3">
             <span class="price text-[15px] font-bold lg:text-base">
@@ -65,13 +62,14 @@
             @if(! $available)
                 <span class="text-[11px] font-semibold text-[var(--ink-soft)]">Εξαντλήθηκε</span>
             @elseif($hasOptions)
-                <span class="grid size-8 shrink-0 place-items-center rounded-lg border border-[var(--hairline)] text-[var(--ink-soft)] transition group-hover:border-[var(--accent)] group-hover:text-[var(--accent)] lg:size-9 lg:rounded-xl lg:group-hover:shadow-sm">
-                    <svg class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5l5 5-5 5"/></svg>
+                <span class="absolute bottom-1 right-0 grid size-7 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-white shadow-[0_3px_8px_rgb(180_83_9_/_0.35)] transition group-hover:bg-[var(--accent-hover)] sm:static sm:size-8 sm:rounded-lg sm:border sm:border-[var(--hairline)] sm:bg-transparent sm:text-[var(--ink-soft)] sm:shadow-none sm:group-hover:border-[var(--accent)] sm:group-hover:bg-transparent sm:group-hover:text-[var(--accent)] lg:size-9 lg:rounded-xl lg:group-hover:shadow-sm">
+                    <svg class="size-4 sm:hidden" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M10 5v10M5 10h10"/></svg>
+                    <svg class="hidden size-4 sm:block" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5l5 5-5 5"/></svg>
                 </span>
             @else
                 <span
                     x-bind:class="addButtonClass({{ $product->id }})"
-                    class="grid size-8 shrink-0 place-items-center rounded-lg transition lg:size-9 lg:rounded-xl lg:shadow-sm lg:group-hover:shadow-md"
+                    class="absolute bottom-1 right-0 grid size-7 shrink-0 place-items-center rounded-full shadow-[0_3px_8px_rgb(180_83_9_/_0.35)] transition sm:static sm:size-8 sm:rounded-lg sm:shadow-none lg:size-9 lg:rounded-xl lg:shadow-sm lg:group-hover:shadow-md"
                 >
                     <svg x-show="notAdded({{ $product->id }})" class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M10 5v10M5 10h10"/></svg>
                     <svg x-cloak x-show="isAdded({{ $product->id }})" class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5l4 4 8-9"/></svg>

@@ -71,6 +71,23 @@ class ProductResource extends Resource
                 ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
                 ->disk('public')
                 ->directory('products')
+                // FilePond fetches stored previews with JavaScript, so an
+                // APP_URL host different from the current admin host is
+                // blocked by CORS even though a storefront <img> still works.
+                ->getUploadedFileUsing(function (string $file, Forms\Components\FileUpload $component): ?array {
+                    $storage = $component->getDisk();
+
+                    if (! $storage->exists($file)) {
+                        return null;
+                    }
+
+                    return [
+                        'name' => basename($file),
+                        'size' => $storage->size($file),
+                        'type' => $storage->mimeType($file),
+                        'url' => parse_url($storage->url($file), PHP_URL_PATH),
+                    ];
+                })
                 ->saveUploadedFileUsing(fn (TemporaryUploadedFile $file, Forms\Components\FileUpload $component): ?string => app(StoreProductImage::class)->store($file, $component))
                 ->imageEditor()
                 ->imageEditorAspectRatios(['1:1'])

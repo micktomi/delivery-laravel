@@ -7,6 +7,7 @@ use App\Filament\Resources\ProductResource\Pages\EditProduct;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
+use Filament\Forms\Components\FileUpload;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -172,6 +173,25 @@ class ProductImageUploadTest extends TestCase
 
         $this->assertSame(['products/existing.jpg'], array_values($state));
         Storage::disk('public')->assertExists('products/existing.jpg');
+    }
+
+    public function test_an_existing_webp_uses_a_same_origin_filepond_preview_url(): void
+    {
+        Storage::fake('public');
+        Storage::disk('public')->put('products/existing.webp', $this->webp());
+
+        $page = $this->editPage($this->product('products/existing.webp'));
+        $field = $page->instance()->form->getComponent(
+            fn ($component): bool => $component instanceof FileUpload && $component->getName() === 'image',
+        );
+
+        $this->assertInstanceOf(FileUpload::class, $field);
+
+        $preview = array_values($field->getUploadedFiles())[0];
+
+        $this->assertSame('/storage/products/existing.webp', $preview['url']);
+        $this->assertSame('image/webp', $preview['type']);
+        $this->assertGreaterThan(0, $preview['size']);
     }
 
     /**
