@@ -16,7 +16,9 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 
 class OrderResource extends Resource
@@ -77,6 +79,25 @@ class OrderResource extends Resource
                     ->options(collect(OrderStatus::cases())->mapWithKeys(
                         fn ($case) => [$case->value => $case->getLabel()]
                     )),
+                // Defaults to today so the resource opens on the same view the
+                // old /kitchen/history page showed; any date can be selected,
+                // or cleared for all orders. The header stats widget above the
+                // table has its own independent date field — deliberately not
+                // wired to this filter, see DailyOrderStatsWidget's docblock.
+                Tables\Filters\Filter::make('created_at')
+                    ->label('Ημερομηνία')
+                    ->form([
+                        Forms\Components\DatePicker::make('date')
+                            ->label('Ημερομηνία')
+                            ->default(fn () => today()->toDateString()),
+                    ])
+                    ->query(fn (Builder $query, array $data): Builder => $query->when(
+                        $data['date'] ?? null,
+                        fn (Builder $query, string $date): Builder => $query->whereDate('created_at', $date),
+                    ))
+                    ->indicateUsing(fn (array $data): ?string => filled($data['date'] ?? null)
+                        ? 'Ημερομηνία: '.Carbon::parse($data['date'])->format('d/m/Y')
+                        : null),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
@@ -198,6 +219,7 @@ class OrderResource extends Resource
 
         return parent::getUrl($name, $parameters, $isAbsolute, $panel, $tenant);
     }
+
     public static function getPages(): array
     {
         return [

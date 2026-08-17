@@ -39,7 +39,6 @@ class AdminPanelAccessTest extends TestCase
         $staff = User::factory()->create();
 
         $this->actingAs($staff)->get('/kitchen')->assertOk();
-        $this->actingAs($staff)->get('/kitchen/history')->assertOk();
     }
 
     public function test_guests_are_redirected_to_the_login_screen(): void
