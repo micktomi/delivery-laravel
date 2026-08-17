@@ -16,6 +16,8 @@ Route::get('/order/{order}/track', OrderTrackingPage::class)->name('order.track'
 Route::get('/payments/viva/{order}/start', [VivaWalletController::class, 'start'])->name('viva.start');
 Route::get('/payments/viva/success', [VivaWalletController::class, 'success'])->name('viva.success');
 Route::get('/payments/viva/failure', [VivaWalletController::class, 'failure'])->name('viva.failure');
+Route::get('/payments/viva/webhook', [VivaWalletController::class, 'webhookVerify'])
+    ->middleware('throttle:60,1')->name('viva.webhook.verify');
 Route::post('/payments/viva/webhook', [VivaWalletController::class, 'webhook'])
     ->middleware('throttle:60,1')->name('viva.webhook');
 

@@ -86,6 +86,16 @@ class VivaWalletController extends Controller
         );
     }
 
+    /**
+     * Viva's dashboard hits this URL with GET once, when a webhook is first
+     * registered, to confirm we control it. It expects the account's static
+     * verification key back as JSON — nothing to do with payment payloads.
+     */
+    public function webhookVerify(): JsonResponse
+    {
+        return response()->json(['Key' => (string) config('services.viva.webhook_verification_key')]);
+    }
+
     public function webhook(Request $request, VivaWalletService $viva): JsonResponse
     {
         $payload = $request->all();

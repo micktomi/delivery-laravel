@@ -187,6 +187,15 @@ class VivaWalletScaffoldTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_webhook_get_verification_returns_the_configured_key(): void
+    {
+        config()->set('services.viva.webhook_verification_key', 'test-verification-key');
+
+        $this->get(route('viva.webhook.verify'))
+            ->assertOk()
+            ->assertExactJson(['Key' => 'test-verification-key']);
+    }
+
     public function test_valid_server_side_confirmation_marks_the_matching_order_paid(): void
     {
         $this->configureViva(true);

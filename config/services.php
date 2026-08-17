@@ -41,6 +41,7 @@ return [
         'client_secret' => env('VIVA_CLIENT_SECRET'),
         'source_code' => env('VIVA_SOURCE_CODE'),
         'environment' => env('VIVA_ENVIRONMENT', 'demo'),
+        'webhook_verification_key' => env('VIVA_WEBHOOK_VERIFICATION_KEY'),
     ],
 
 ];
