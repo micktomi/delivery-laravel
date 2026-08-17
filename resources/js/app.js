@@ -133,3 +133,11 @@ document.addEventListener('livewire:init', () => {
         },
     }));
 });
+
+/* PWA install/standalone-launch support. Registration only — the worker
+   itself (public/service-worker.js) sticks to whitelisted static assets. */
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js');
+    });
+}
