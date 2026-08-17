@@ -335,6 +335,39 @@
             ])->values()->all(),
         ])->values()->all()),
 
+        // Ζάχαρη (sweetness) / Γλυκαντικό (sweetener) is the one coffee-specific
+        // pair with a dependency: matched by name, since group/value ids are a
+        // database detail. Σκέτος (plain) makes any sweetener choice moot.
+        sweetnessGroupName: 'Ζάχαρη',
+        sweetenerGroupName: 'Γλυκαντικό',
+        plainValueName: 'Σκέτος',
+        defaultSweetenerValueName: 'Ζάχαρη',
+
+        get sweetenerGroup() {
+            return this.groups.find(g => g.name === this.sweetenerGroupName) || null;
+        },
+        get isPlain() {
+            const sweetnessGroup = this.groups.find(g => g.name === this.sweetnessGroupName);
+            if (!sweetnessGroup) return false;
+            const selected = sweetnessGroup.values.find(v => v.id == this.selectedOptions[sweetnessGroup.id]);
+            return selected ? selected.name === this.plainValueName : false;
+        },
+        init() {
+            // Keeps selectedOptions consistent as the sweetness pick changes:
+            // going plain drops any sweetener choice so it can never reach the
+            // cart snapshot; leaving plain restores a safe default sweetener.
+            this.$watch('isPlain', (isPlain) => {
+                const group = this.sweetenerGroup;
+                if (!group) return;
+                if (isPlain) {
+                    delete this.selectedOptions[group.id];
+                } else if (!this.selectedOptions[group.id]) {
+                    const fallback = group.values.find(v => v.name === this.defaultSweetenerValueName) || group.values[0];
+                    if (fallback) this.selectedOptions[group.id] = fallback.id;
+                }
+            });
+        },
+
         get totalDelta() {
             let d = 0;
             for (const g of this.groups) {
@@ -403,7 +436,10 @@
             style="-webkit-overflow-scrolling: touch; touch-action: pan-y;"
         >
             @foreach($openProduct->optionGroups as $group)
-                <div>
+                {{-- Γλυκαντικό only makes sense once the coffee isn't plain;
+                     isPlain is the same name-driven check that also cleans
+                     selectedOptions when the sweetness pick changes. --}}
+                <div @if($group->name === 'Γλυκαντικό') x-show="!isPlain" @endif>
                     {{-- The limits are stated up front rather than left for the
                          validation error to explain after the fact. --}}
                     <div class="mb-2.5 flex items-baseline gap-2">

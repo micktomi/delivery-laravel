@@ -12,6 +12,10 @@
     $canApply = $canApply ?? true;
     $couponError = $couponError ?? null;
     $couponNotice = $couponNotice ?? null;
+
+    // Measured against the subtotal, same figure the server enforces at submit.
+    $minimumOrderAmount = (float) config('cart.minimum_order_amount', 5.00);
+    $remainingForMinimumOrder = round(max(0.0, $minimumOrderAmount - (float) $totals['subtotal']), 2);
 @endphp
 
 @if($canApply || $appliedCoupon)
@@ -71,4 +75,14 @@
         <span class="text-[13px] font-semibold">Σύνολο</span>
         <span class="price font-display {{ $scope === 'mobile' ? 'text-2xl' : 'text-xl' }} font-extrabold" style="color: var(--accent)">{{ number_format($totals['total'], 2, ',', '.') }} €</span>
     </div>
+
+    @if($remainingForMinimumOrder > 0)
+        <p class="pt-0.5 text-[11.5px] font-semibold text-amber-700">
+            Χρειάζονται ακόμη {{ number_format($remainingForMinimumOrder, 2, ',', '.') }} € για την ελάχιστη παραγγελία.
+        </p>
+    @else
+        <p class="pt-0.5 text-[11.5px] font-medium text-[var(--ink-soft)]">
+            Ελάχιστη παραγγελία {{ number_format($minimumOrderAmount, 2, ',', '.') }} €
+        </p>
+    @endif
 </div>

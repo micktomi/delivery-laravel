@@ -17,7 +17,7 @@
 --}}
 @php
     $compact = $compact ?? false;
-    $options = collect($line['selected_options'] ?? [])->pluck('value')->filter()->implode(' · ');
+    $options = \App\Services\OptionsPresenter::format($line['selected_options'] ?? []);
 @endphp
 
 <div

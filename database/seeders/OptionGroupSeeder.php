@@ -47,6 +47,7 @@ class OptionGroupSeeder extends Seeder
                     ['name' => 'Ζάχαρη', 'price_delta' => 0, 'is_default' => true],
                     ['name' => 'Στέβια', 'price_delta' => 0, 'is_default' => false],
                     ['name' => 'Ζαχαρίνη', 'price_delta' => 0, 'is_default' => false],
+                    ['name' => 'Καστανή ζάχαρη', 'price_delta' => 0, 'is_default' => false],
                 ],
             ],
             [

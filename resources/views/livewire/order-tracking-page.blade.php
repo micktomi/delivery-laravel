@@ -135,7 +135,7 @@
                     </div>
                     @if(!empty($item->selected_options))
                         <div class="text-sm text-gray-400 mt-0.5 leading-snug">
-                            {{ collect($item->selected_options)->pluck('value')->implode(' · ') }}
+                            {{ \App\Services\OptionsPresenter::format($item->selected_options) }}
                         </div>
                     @endif
                     @if(!empty($item->notes))

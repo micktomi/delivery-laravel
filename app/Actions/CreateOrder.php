@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Services\CartService;
+use App\Services\OptionsPresenter;
 use App\Services\PricingService;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -50,6 +51,12 @@ class CreateOrder
                 $cartItems = $this->verifiedLines();
 
                 $subtotal = $this->pricing->subtotal($cartItems);
+
+                // Measured on the bare subtotal — before delivery fee, payment
+                // surcharges or the coupon discount — so a coupon can never be
+                // used to duck under the floor for eligibility.
+                $this->assertMeetsMinimumOrder($subtotal);
+
                 $deliveryFee = 0.00;
 
                 // Nothing about the coupon is taken from the session or the browser
@@ -201,6 +208,25 @@ class CreateOrder
     }
 
     /**
+     * @throws ValidationException when the subtotal is below the configured floor
+     */
+    private function assertMeetsMinimumOrder(float $subtotal): void
+    {
+        $minimum = (float) config('cart.minimum_order_amount', 5.00);
+
+        if ($this->pricing->meetsMinimum($subtotal, $minimum)) {
+            return;
+        }
+
+        $remaining = round(max(0.0, $minimum - $subtotal), 2);
+
+        throw ValidationException::withMessages([
+            'cart' => 'Χρειάζονται ακόμη '.number_format($remaining, 2, ',', '.')
+                .' € για να ολοκληρώσετε την παραγγελία.',
+        ]);
+    }
+
+    /**
      * Re-check the cart against the catalogue before anything is charged: the
      * session may be up to SESSION_LIFETIME minutes old and every value in it
      * originally came from a browser.
@@ -327,6 +353,11 @@ class CreateOrder
             $deltas[] = $delta;
             $selectedByGroup[$group->id][] = $value->id;
         }
+
+        // A tampered/stale payload could submit "Σκέτος + Στέβια": canonicalize
+        // it down to just the plain coffee rather than trust the pair as-is.
+        $options = OptionsPresenter::canonicalize($options);
+        $deltas = array_column($options, 'price_delta');
 
         foreach ($groups as $group) {
             $selectedCount = count(array_unique($selectedByGroup[$group->id] ?? []));

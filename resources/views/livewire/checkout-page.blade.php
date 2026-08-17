@@ -69,7 +69,7 @@
                 </div>
                 @if(!empty($item['selected_options']))
                     <div class="text-sm text-gray-400 mt-0.5 leading-snug">
-                        {{ collect($item['selected_options'])->pluck('value')->implode(' · ') }}
+                        {{ \App\Services\OptionsPresenter::format($item['selected_options']) }}
                     </div>
                 @endif
                 @if(!empty($item['notes']))
@@ -186,15 +186,23 @@
 </form>
 
 {{-- ══ STICKY SUBMIT ══ --}}
+@php
+    // Convenience only: the actual floor is enforced server-side in CreateOrder.
+    $belowMinimumOrder = $totals['subtotal'] < (float) config('cart.minimum_order_amount', 5.00);
+@endphp
 <div class="fixed bottom-0 left-0 right-0 z-20 bg-white border-t px-4 pt-3 pb-4"
     style="padding-bottom: max(1rem, env(safe-area-inset-bottom));">
     <button
         type="button"
         wire:click="submit"
-        class="w-full py-4 text-white font-black text-xl rounded-2xl shadow-lg transition active:scale-95"
+        @class([
+            'w-full py-4 text-white font-black text-xl rounded-2xl shadow-lg transition active:scale-95',
+            'opacity-60' => $belowMinimumOrder,
+        ])
         style="background: var(--accent);"
         wire:loading.attr="disabled"
         wire:loading.class="opacity-60"
+        @disabled($belowMinimumOrder)
     >
         <span wire:loading.remove>Υποβολή παραγγελίας</span>
         <span wire:loading class="flex items-center justify-center gap-2">

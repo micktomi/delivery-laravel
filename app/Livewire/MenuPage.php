@@ -10,6 +10,7 @@ use App\Models\OptionValue;
 use App\Models\Order;
 use App\Models\Product;
 use App\Services\CartService;
+use App\Services\OptionsPresenter;
 use App\Services\PricingService;
 use Illuminate\Support\Str;
 use Livewire\Component;
@@ -157,6 +158,11 @@ class MenuPage extends Component
                 }
             }
         }
+
+        // A plain coffee (Ζάχαρη = Σκέτος) makes any Γλυκαντικό pick moot; drop
+        // it from the snapshot so the cart line and its price stay consistent.
+        $snapshotOptions = OptionsPresenter::canonicalize($snapshotOptions);
+        $deltas = array_column($snapshotOptions, 'price_delta');
 
         $quantity = app(CartService::class)->normalizeQuantity($this->quantity);
         $this->quantity = $quantity;

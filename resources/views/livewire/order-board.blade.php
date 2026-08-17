@@ -203,7 +203,7 @@
                                         </div>
                                         @if(!empty($item->selected_options))
                                             <div class="mt-0.5 break-words pl-2 text-xs leading-snug text-gray-500">
-                                                · {{ collect($item->selected_options)->pluck('value')->implode(' · ') }}
+                                                · {{ \App\Services\OptionsPresenter::format($item->selected_options) }}
                                             </div>
                                         @endif
                                         @if($item->notes)

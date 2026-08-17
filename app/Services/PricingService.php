@@ -45,6 +45,15 @@ class PricingService
     }
 
     /**
+     * Cent-exact comparison, so a subtotal that equals the minimum to the
+     * cent (never mind a stray binary-float remainder) is never rejected.
+     */
+    public function meetsMinimum(float $subtotal, float $minimum): bool
+    {
+        return $this->cents($subtotal) >= $this->cents($minimum);
+    }
+
+    /**
      * The three figures that must always be shown together: what the basket
      * costs, what the coupon takes off, and what the courier collects.
      *
