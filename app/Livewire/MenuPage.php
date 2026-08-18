@@ -12,6 +12,7 @@ use App\Models\Product;
 use App\Services\CartService;
 use App\Services\OptionsPresenter;
 use App\Services\PricingService;
+use App\Support\StoreSchedule;
 use Illuminate\Support\Str;
 use Livewire\Component;
 
@@ -318,9 +319,14 @@ class MenuPage extends Component
             ? ($cart->coupon()?->rejectionReason($totals['subtotal'])
                 ?? 'Ο κωδικός δεν είναι πλέον διαθέσιμος.')
             : null;
+        $storeSchedule = app(StoreSchedule::class);
+        $isAcceptingOrders = $storeSchedule->isAcceptingOrders();
+        $nextOpeningText = $storeSchedule->nextOpeningText();
+        $closedMessage = $storeSchedule->closedMessage();
 
         return view('livewire.menu-page', compact(
             'categories', 'openProduct', 'totals', 'appliedCoupon', 'couponNotice',
+            'isAcceptingOrders', 'nextOpeningText', 'closedMessage',
         ))->layout('layouts.app');
     }
 }

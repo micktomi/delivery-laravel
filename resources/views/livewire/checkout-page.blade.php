@@ -56,6 +56,14 @@
         </div>
     </div>
 @endif
+@if(! $isAcceptingOrders && ! $errors->has('checkout'))
+    <div class="px-4 pt-4">
+        <div class="rounded-2xl border-2 border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+            {{ $closedStoreMessage }}
+        </div>
+    </div>
+@endif
+
 
 {{-- ══ CART SUMMARY ══ --}}
 <div class="px-4 pt-5 pb-2">
@@ -180,10 +188,13 @@
                         ? 'border-amber-400 bg-amber-50 shadow-md'
                         : 'border-gray-200 bg-gray-50' }}"
                     style="{{ $payment_method === $method->value ? 'border-color: var(--accent);' : '' }}"
+                    data-payment-method="{{ $method->value }}"
+                    data-payment-selected="{{ $payment_method === $method->value ? 'true' : 'false' }}"
                 >
                     <input type="radio"
-                        wire:model="payment_method"
+                        wire:model.live="payment_method"
                         value="{{ $method->value }}"
+                        @checked($payment_method === $method->value)
                         class="sr-only">
                     <span class="text-2xl mb-1">{{ $method->value === 'cash' ? '💵' : '💳' }}</span>
                     <span class="text-xs font-bold text-center leading-tight text-gray-700">{{ $method->getLabel() }}</span>
@@ -198,6 +209,10 @@
                 </label>
             @endforeach
         </div>
+        <p
+            class="mt-3 text-sm font-semibold text-gray-600"
+            data-payment-summary="{{ $selectedPaymentMethod?->value }}"
+        >Επιλογή: {{ $selectedPaymentMethod?->getLabel() }}</p>
         @error('payment_method')
             <p class="text-red-500 text-sm mt-2">{{ $message }}</p>
         @enderror
@@ -206,10 +221,6 @@
 </form>
 
 {{-- ══ STICKY SUBMIT ══ --}}
-@php
-    // Convenience only: the actual floor is enforced server-side in CreateOrder.
-    $belowMinimumOrder = $totals['subtotal'] < (float) config('cart.minimum_order_amount', 5.00);
-@endphp
 <div class="fixed bottom-0 left-0 right-0 z-20 bg-white border-t px-4 pt-3 pb-4"
     style="padding-bottom: max(1rem, env(safe-area-inset-bottom));">
     <button
@@ -217,14 +228,14 @@
         wire:click="submit"
         @class([
             'w-full py-4 text-white font-black text-xl rounded-2xl shadow-lg transition active:scale-95',
-            'opacity-60' => $belowMinimumOrder,
+            'opacity-60' => $checkoutDisabled,
         ])
         style="background: var(--accent);"
         wire:loading.attr="disabled"
         wire:loading.class="opacity-60"
-        @disabled($belowMinimumOrder)
+        @disabled($checkoutDisabled)
     >
-        <span wire:loading.remove>Υποβολή παραγγελίας</span>
+        <span wire:loading.remove>{{ $isAcceptingOrders ? 'Υποβολή παραγγελίας' : 'Το κατάστημα είναι κλειστό' }}</span>
         <span wire:loading class="flex items-center justify-center gap-2">
             <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

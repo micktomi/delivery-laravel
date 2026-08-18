@@ -56,10 +56,7 @@
                         @endforeach
                     </div>
 
-                    <div class="flex items-baseline justify-between">
-                        <span class="text-sm font-semibold">Προς είσπραξη</span>
-                        <span class="price font-display text-xl font-extrabold" style="color: var(--accent)">{{ number_format($activeOrder->total, 2, ',', '.') }} €</span>
-                    </div>
+                    @include('livewire.partials.driver-payment-instruction', ['order' => $activeOrder])
 
                     @if($activeOrder->delivery_status === \App\Enums\DeliveryStatus::Assigned)
                         <button wire:click="pickUp({{ $activeOrder->id }})" type="button" class="w-full rounded-xl px-4 py-3.5 text-sm font-semibold text-white" style="background: var(--accent);">Παρέλαβα την παραγγελία</button>
@@ -91,6 +88,8 @@
                                 </div>
                                 <span class="price shrink-0 text-sm font-bold">{{ number_format($order->total, 2, ',', '.') }} €</span>
                             </div>
+                            @include('livewire.partials.driver-payment-instruction', ['order' => $order])
+
                             <button wire:click="claim({{ $order->id }})" type="button" class="mt-4 w-full rounded-xl border border-[var(--accent)] px-4 py-3 text-sm font-semibold" style="color: var(--accent);">Ανάληψη παραγγελίας</button>
                         </article>
                     @empty

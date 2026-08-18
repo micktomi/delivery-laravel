@@ -49,6 +49,14 @@
             <div class="text-sm text-gray-400">{{ $order->floor_bell }}</div>
         @endif
     </div>
+    <div
+        data-order-payment-method="{{ $order->payment_method->value }}"
+        class="mb-8 rounded-2xl border-2 border-gray-200 bg-white px-5 py-4"
+    >
+        <div class="text-xs font-bold uppercase tracking-wider text-gray-400">Τρόπος πληρωμής</div>
+        <div class="mt-1 font-black text-gray-800">{{ $order->payment_method->trackingLabel($order->payment_status) }}</div>
+    </div>
+
 
     {{-- ══ CANCELLED ══ --}}
     @if($isCancelled)

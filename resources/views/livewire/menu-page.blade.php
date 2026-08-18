@@ -32,6 +32,17 @@
     x-on:scroll.window="onScroll()"
     class="min-h-screen bg-white overflow-x-clip"
 >
+@if(! $isAcceptingOrders)
+    <section data-store-closed-banner class="border-b border-amber-300 bg-amber-50 px-4 py-3 text-center text-amber-950">
+        <p class="font-display text-sm font-extrabold">
+            {{ 'Κλειστά'.($nextOpeningText ? ' — '.$nextOpeningText : '') }}
+        </p>
+        @if($closedMessage)
+            <p class="mt-1 text-xs font-medium">{{ $closedMessage }}</p>
+        @endif
+    </section>
+@endif
+
 
 {{-- ══ HERO ══
      No photo. This is a takeaway menu: vertical space above the first product
@@ -213,10 +224,11 @@
             <div class="shrink-0 border-t border-[var(--hairline)] bg-[var(--sunken)] px-4 py-4 lg:px-5 lg:py-5">
                 @include('livewire.partials.cart-summary', ['scope' => 'desktop'])
                 <a
-                    href="/checkout"
-                    class="block w-full rounded-xl px-4 py-3 text-center text-[14px] font-semibold text-white transition active:scale-95 lg:shadow-sm lg:transition-[box-shadow,filter] lg:hover:brightness-95 lg:hover:shadow-md"
+                    href="{{ $isAcceptingOrders ? '/checkout' : '#' }}"
+                    aria-disabled="{{ $isAcceptingOrders ? 'false' : 'true' }}"
+                    class="block w-full rounded-xl px-4 py-3 text-center text-[14px] font-semibold text-white transition active:scale-95 lg:shadow-sm lg:transition-[box-shadow,filter] lg:hover:brightness-95 lg:hover:shadow-md {{ $isAcceptingOrders ? '' : 'pointer-events-none opacity-60' }}"
                     style="background: var(--accent);"
-                >Ολοκλήρωση</a>
+                >{{ $isAcceptingOrders ? 'Ολοκλήρωση' : 'Το κατάστημα είναι κλειστό' }}</a>
             </div>
             @endif
         </div>
@@ -303,10 +315,11 @@
     <div class="shrink-0 border-t border-[var(--hairline)] bg-[var(--sunken)] px-4 pb-4 pt-4">
         @include('livewire.partials.cart-summary', ['scope' => 'mobile'])
         <a
-            href="/checkout"
-            class="block w-full rounded-xl px-4 py-3.5 text-center text-[15px] font-semibold text-white transition active:scale-95"
+            href="{{ $isAcceptingOrders ? '/checkout' : '#' }}"
+            aria-disabled="{{ $isAcceptingOrders ? 'false' : 'true' }}"
+            class="block w-full rounded-xl px-4 py-3.5 text-center text-[15px] font-semibold text-white transition active:scale-95 {{ $isAcceptingOrders ? '' : 'pointer-events-none opacity-60' }}"
             style="background: var(--accent);"
-        >Ολοκλήρωση παραγγελίας</a>
+        >{{ $isAcceptingOrders ? 'Ολοκλήρωση παραγγελίας' : 'Το κατάστημα είναι κλειστό' }}</a>
     </div>
     @endif
 </div>

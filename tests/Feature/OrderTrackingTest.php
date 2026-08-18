@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Enums\OrderStatus;
+use App\Enums\PaymentMethod;
 use App\Models\Order;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class OrderTrackingTest extends TestCase
@@ -48,5 +50,31 @@ class OrderTrackingTest extends TestCase
         $this->get(route('order.track', $order))
             ->assertOk()
             ->assertDontSee('login');
+    }
+
+    public static function persistedPaymentLabels(): array
+    {
+        return [
+            'cash' => [PaymentMethod::Cash, null, 'Μετρητά κατά την παράδοση'],
+            'courier POS' => [PaymentMethod::PosCourier, null, 'POS στον courier'],
+            'Viva paid' => [PaymentMethod::Viva, 'paid', 'Viva Wallet — Πληρωμένο'],
+            'Viva pending' => [PaymentMethod::Viva, 'pending', 'Viva Wallet — Αναμονή επιβεβαίωσης'],
+        ];
+    }
+
+    #[DataProvider('persistedPaymentLabels')]
+    public function test_tracking_shows_persisted_payment_method_and_status(
+        PaymentMethod $method,
+        ?string $paymentStatus,
+        string $label,
+    ): void {
+        $order = Order::factory()->create([
+            'payment_method' => $method->value,
+            'payment_status' => $paymentStatus,
+        ]);
+
+        $this->get(route('order.track', $order))
+            ->assertOk()
+            ->assertSee($label);
     }
 }

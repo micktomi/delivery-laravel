@@ -43,7 +43,7 @@ class VivaWalletScaffoldTest extends TestCase
         $this->seedCart();
 
         $component = Livewire::test(CheckoutPage::class)
-            ->assertDontSee('ΚΑΡΤΑ ONLINE (VIVA)')
+            ->assertDontSee('Viva Wallet')
             ->set('customer_name', 'Μιχάλης')
             ->set('phone', '6912345678')
             ->set('address', 'Δημοκρατίας 42')
@@ -86,7 +86,7 @@ class VivaWalletScaffoldTest extends TestCase
         $this->seedCart();
 
         $component = Livewire::test(CheckoutPage::class)
-            ->assertSee('ΚΑΡΤΑ ONLINE (VIVA)')
+            ->assertSee('Viva Wallet')
             ->set('customer_name', 'Μιχάλης')
             ->set('phone', '6912345678')
             ->set('address', 'Δημοκρατίας 42')

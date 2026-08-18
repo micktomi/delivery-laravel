@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Actions\TransitionDriverDelivery;
 use App\Enums\DeliveryStatus;
 use App\Enums\OrderStatus;
+use App\Enums\PaymentMethod;
 use App\Livewire\DriverDashboard;
 use App\Livewire\DriverLogin;
 use App\Models\Driver;
@@ -14,6 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class DriverWorkflowTest extends TestCase
@@ -70,6 +72,46 @@ class DriverWorkflowTest extends TestCase
         $this->assertStringContainsString(e($notes), $html);
         $this->assertStringContainsString('42,75 €', $html);
         $this->assertStringContainsString('Παρέλαβα την παραγγελία', $html);
+    }
+
+    public static function courierPaymentInstructions(): array
+    {
+        return [
+            'cash collection' => [
+                PaymentMethod::Cash,
+                null,
+                'ΕΙΣΠΡΑΞΗ ΜΕΤΡΗΤΩΝ: 12,30 €',
+            ],
+            'courier POS collection' => [
+                PaymentMethod::PosCourier,
+                null,
+                'ΠΛΗΡΩΜΗ ΜΕ POS: 12,30 €',
+            ],
+            'paid Viva order' => [
+                PaymentMethod::Viva,
+                'paid',
+                'ΠΛΗΡΩΜΕΝΟ — ΜΗΝ ΕΙΣΠΡΑΞΕΙΣ',
+            ],
+        ];
+    }
+
+    #[DataProvider('courierPaymentInstructions')]
+    public function test_active_delivery_shows_operational_payment_instruction(
+        PaymentMethod $method,
+        ?string $paymentStatus,
+        string $instruction,
+    ): void {
+        $driver = Driver::factory()->create();
+        $order = Order::factory()->status(OrderStatus::Ready)->create([
+            'payment_method' => $method->value,
+            'payment_status' => $paymentStatus,
+            'total' => '12.30',
+        ]);
+        app(TransitionDriverDelivery::class)->claim($order->id, $driver);
+
+        Livewire::actingAs($driver, 'driver')
+            ->test(DriverDashboard::class)
+            ->assertSee($instruction);
     }
 
     public function test_dashboard_claim_uses_the_authenticated_driver_not_frontend_input(): void

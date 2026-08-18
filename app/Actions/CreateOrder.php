@@ -12,6 +12,7 @@ use App\Models\Product;
 use App\Services\CartService;
 use App\Services\OptionsPresenter;
 use App\Services\PricingService;
+use App\Support\StoreSchedule;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -29,6 +30,8 @@ class CreateOrder
 
     public function execute(array $checkoutData): Order
     {
+        $this->assertStoreAcceptingOrders();
+
         $checkoutToken = $checkoutData['checkout_token'] ?? (string) Str::uuid();
 
         if (! is_string($checkoutToken) || ! Str::isUuid($checkoutToken)) {
@@ -174,6 +177,19 @@ class CreateOrder
         } catch (Throwable) {
             // The order is committed; an unavailable logger cannot change that truth.
         }
+    }
+
+    private function assertStoreAcceptingOrders(): void
+    {
+        $storeSchedule = app(StoreSchedule::class);
+
+        if ($storeSchedule->isAcceptingOrders()) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'checkout' => $storeSchedule->closedCheckoutMessage(),
+        ]);
     }
 
     /**

@@ -10,7 +10,9 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Services\CartService;
 use App\Services\PricingService;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -75,6 +77,39 @@ class CheckoutPageSubmitTest extends TestCase
         }
 
         return $component;
+    }
+
+    public static function paymentVisualStates(): array
+    {
+        return [
+            'cash' => [PaymentMethod::Cash, 'Μετρητά'],
+            'courier POS' => [PaymentMethod::PosCourier, 'POS στον courier'],
+            'Viva' => [PaymentMethod::Viva, 'Viva Wallet'],
+        ];
+    }
+
+    #[DataProvider('paymentVisualStates')]
+    public function test_payment_selector_updates_visual_state_and_summary(
+        PaymentMethod $method,
+        string $label,
+    ): void {
+        config()->set('services.viva.enabled', true);
+        $this->seedCart();
+
+        $component = Livewire::test(CheckoutPage::class)
+            ->set('payment_method', $method->value)
+            ->assertSee($label);
+
+        $html = $component->html();
+
+        $this->assertMatchesRegularExpression(
+            '/data-payment-method="'.preg_quote($method->value, '/').'"\\s+data-payment-selected="true"/',
+            $html,
+        );
+        $this->assertStringContainsString(
+            'data-payment-summary="'.$method->value.'"',
+            $html,
+        );
     }
 
     public function test_submit_validates_required_customer_fields(): void
@@ -221,6 +256,48 @@ class CheckoutPageSubmitTest extends TestCase
         $this->fill()->call('submit')->assertHasErrors(['checkout']);
 
         $this->assertDatabaseCount('orders', 5);
+    }
+
+    public function test_closed_store_rejects_checkout_without_order_or_viva_flow(): void
+    {
+        config()->set('store.accepting_orders', false);
+        config()->set('store.closed_message', 'Το κατάστημα έκλεισε για σήμερα.');
+        config()->set('services.viva.enabled', true);
+        Http::fake();
+        $this->seedCart();
+
+        $this->fill(['payment_method' => PaymentMethod::Viva->value])
+            ->call('submit')
+            ->assertHasErrors(['checkout'])
+            ->assertNoRedirect()
+            ->assertSee('Το κατάστημα έκλεισε για σήμερα.');
+
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertFalse(app(CartService::class)->isEmpty());
+        Http::assertNothingSent();
+    }
+
+    public function test_open_schedule_preserves_current_checkout_behaviour(): void
+    {
+        CarbonImmutable::setTestNow(
+            CarbonImmutable::parse('2026-08-17 10:00', 'Europe/Athens'),
+        );
+        config()->set('store.accepting_orders', true);
+        config()->set('store.opening_hours', [
+            'monday' => [['09:00', '11:00']],
+        ]);
+        $this->seedCart();
+
+        try {
+            $this->fill(['payment_method' => PaymentMethod::PosCourier->value])
+                ->call('submit')
+                ->assertHasNoErrors()
+                ->assertNoRedirect();
+
+            $this->assertSame(PaymentMethod::PosCourier, Order::firstOrFail()->payment_method);
+        } finally {
+            CarbonImmutable::setTestNow();
+        }
     }
 
     /** S6: an unexpected failure is logged, shown safely, and keeps the cart. */

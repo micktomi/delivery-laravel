@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Actions\CreateOrder;
 use App\Enums\PaymentMethod;
 use App\Services\CartService;
+use App\Support\StoreSchedule;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
@@ -60,6 +61,14 @@ class CheckoutPage extends Component
         // A second tap, a retried request or a replayed snapshot must not
         // produce a second order.
         if ($this->confirmedOrderId !== null) {
+            return;
+        }
+
+        $storeSchedule = app(StoreSchedule::class);
+
+        if (! $storeSchedule->isAcceptingOrders()) {
+            $this->addError('checkout', $storeSchedule->closedCheckoutMessage());
+
             return;
         }
 
@@ -187,6 +196,10 @@ class CheckoutPage extends Component
             ? ($cart->coupon()?->rejectionReason($totals['subtotal'])
                 ?? 'Ο κωδικός δεν είναι πλέον διαθέσιμος.')
             : null;
+        $storeSchedule = app(StoreSchedule::class);
+        $isAcceptingOrders = $storeSchedule->isAcceptingOrders();
+        $closedStoreMessage = $storeSchedule->closedCheckoutMessage();
+        $belowMinimumOrder = $totals['subtotal'] < (float) config('cart.minimum_order_amount', 5.00);
 
         return view('livewire.checkout-page', [
             'cart' => $cart->items(),
@@ -194,6 +207,10 @@ class CheckoutPage extends Component
             'appliedCoupon' => $appliedCoupon,
             'couponNotice' => $couponNotice,
             'paymentMethods' => $this->availablePaymentMethods(),
+            'selectedPaymentMethod' => PaymentMethod::tryFrom($this->payment_method),
+            'isAcceptingOrders' => $isAcceptingOrders,
+            'closedStoreMessage' => $closedStoreMessage,
+            'checkoutDisabled' => $belowMinimumOrder || ! $isAcceptingOrders,
         ])->layout('layouts.app');
     }
 
