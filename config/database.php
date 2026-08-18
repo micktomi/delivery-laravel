@@ -84,6 +84,23 @@ return [
             ]) : [],
         ],
 
+        'migration_mysql' => [
+            'driver' => 'mariadb',
+            'host' => env('MIGRATION_DB_HOST'),
+            'port' => env('MIGRATION_DB_PORT'),
+            'database' => env('MIGRATION_DB_DATABASE'),
+            'username' => env('MIGRATION_DB_USERNAME'),
+            'password' => env('MIGRATION_DB_PASSWORD'),
+            'unix_socket' => '',
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => [],
+        ],
+
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DB_URL'),
