@@ -3,11 +3,14 @@
 namespace App\Actions;
 
 use App\Enums\OrderStatus;
+use App\Mail\OrderConfirmationMail;
 use App\Models\Order;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class TransitionOrderStatus
 {
@@ -17,8 +20,11 @@ class TransitionOrderStatus
      */
     public function execute(Order $order, OrderStatus $expected): Order
     {
-        return DB::transaction(function () use ($order, $expected) {
-            $fresh = Order::query()->whereKey($order->getKey())->lockForUpdate()->first();
+        $result = DB::transaction(function () use ($order, $expected) {
+            $fresh = Order::query()
+                ->whereKey($order->getKey())
+                ->lockForUpdate()
+                ->first();
 
             if (! $fresh) {
                 throw ValidationException::withMessages([
@@ -63,7 +69,29 @@ class TransitionOrderStatus
                 'user_id' => Auth::id(),
             ]);
 
-            return $fresh->fresh();
+            return [
+                'order' => $fresh->fresh(),
+                'from' => $expected,
+                'to' => $next,
+            ];
         });
+
+        if (
+            $result['from'] === OrderStatus::Nea &&
+            $result['to'] === OrderStatus::Preparing &&
+            filled($result['order']->customer_email)
+        ) {
+            try {
+                Mail::to($result['order']->customer_email)
+                    ->send(new OrderConfirmationMail($result['order']));
+            } catch (Throwable $e) {
+                Log::error('order.confirmation_mail_failed', [
+                    'order_id' => $result['order']->id,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $result['order'];
     }
 }

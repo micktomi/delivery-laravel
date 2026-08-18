@@ -118,6 +118,26 @@
             @enderror
         </div>
 
+        {{-- Email --}}
+        <div>
+            <label class="block text-sm font-bold text-gray-600 mb-1.5">
+                Email
+                <span class="font-normal text-gray-400">(προαιρετικό)</span>
+            </label>
+
+            <input
+                type="email"
+                wire:model="customer_email"
+                autocomplete="email"
+                placeholder="name@example.com"
+                class="w-full rounded-xl border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+            >
+
+            @error('customer_email')
+                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+            @enderror
+        </div>
+
         {{-- Address --}}
         <div>
             <label class="block text-sm font-bold text-gray-600 mb-1.5">Διεύθυνση *</label>

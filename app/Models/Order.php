@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\DeliveryStatus;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,7 +20,7 @@ class Order extends Model
     protected $fillable = [
         'display_number', 'status', 'payment_method',
         'payment_status', 'checkout_token',
-        'customer_name', 'phone', 'address', 'floor_bell', 'notes',
+        'customer_name', 'customer_email', 'phone', 'address', 'floor_bell', 'notes',
         'subtotal', 'delivery_fee', 'total', 'placed_at',
         'coupon_code', 'discount_amount', 'coupon_id',
     ];
@@ -28,7 +29,7 @@ class Order extends Model
     {
         return [
             'status' => OrderStatus::class,
-            'delivery_status' => \App\Enums\DeliveryStatus::class,
+            'delivery_status' => DeliveryStatus::class,
             'payment_method' => PaymentMethod::class,
             'subtotal' => 'decimal:2',
             'delivery_fee' => 'decimal:2',

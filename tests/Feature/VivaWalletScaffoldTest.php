@@ -14,10 +14,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
+use Mockery;
+use Psr\Log\LoggerInterface;
 use Tests\TestCase;
 
 class VivaWalletScaffoldTest extends TestCase
@@ -203,14 +206,100 @@ class VivaWalletScaffoldTest extends TestCase
         $transactionId = (string) Str::uuid();
         $this->fakeVerifiedTransaction($transactionId, $order->viva_order_code, 5.00);
 
+        $paymentLogger = Mockery::mock(LoggerInterface::class);
+        $paymentLogger->shouldReceive('log')
+            ->once()
+            ->with('info', 'viva.payment_confirmed', Mockery::on(
+                fn (array $context): bool => $context['order_id'] === $order->getKey()
+                    && $context['transaction_id'] === $transactionId,
+            ));
+        Log::shouldReceive('channel')->once()->with('payments')->andReturn($paymentLogger);
+
         $this->postJson(route('viva.webhook'), $this->webhookPayload($transactionId, $order->viva_order_code))
             ->assertOk()
             ->assertJson(['status' => 'paid']);
 
         $order->refresh();
+        $this->assertSame(OrderStatus::Nea, $order->status);
         $this->assertSame('paid', $order->payment_status);
         $this->assertSame($transactionId, $order->viva_transaction_id);
         $this->assertNotNull($order->paid_at);
+    }
+
+    public function test_cancelled_order_records_late_verified_payment_without_reopening(): void
+    {
+        $this->configureViva(true);
+        $order = $this->vivaOrder(['status' => OrderStatus::Cancelled->value]);
+        $transactionId = (string) Str::uuid();
+        $this->fakeVerifiedTransaction($transactionId, $order->viva_order_code, 5.00);
+
+        $paymentLogger = Mockery::mock(LoggerInterface::class);
+        $paymentLogger->shouldReceive('log')
+            ->once()
+            ->with('critical', 'viva.payment_received_after_cancellation', Mockery::on(
+                fn (array $context): bool => $context['order_id'] === $order->getKey()
+                    && $context['viva_order_code'] === $order->viva_order_code
+                    && $context['transaction_id'] === $transactionId
+                    && $context['action_required'] === 'refund_or_manual_review',
+            ));
+        Log::shouldReceive('channel')->once()->with('payments')->andReturn($paymentLogger);
+
+        $this->postJson(route('viva.webhook'), $this->webhookPayload($transactionId, $order->viva_order_code))
+            ->assertOk()
+            ->assertJson(['status' => 'paid']);
+
+        $order->refresh();
+        $this->assertSame(OrderStatus::Cancelled, $order->status);
+        $this->assertSame('paid', $order->payment_status);
+        $this->assertSame($transactionId, $order->viva_transaction_id);
+        $this->assertNotNull($order->paid_at);
+        $this->assertNull($order->driver_id);
+        $this->assertNull($order->delivery_status);
+        $this->assertDatabaseCount('order_driver_transitions', 0);
+    }
+
+    public function test_duplicate_late_webhook_for_cancelled_order_is_idempotent(): void
+    {
+        $this->configureViva(true);
+        $order = $this->vivaOrder(['status' => OrderStatus::Cancelled->value]);
+        $transactionId = (string) Str::uuid();
+        $payload = $this->webhookPayload($transactionId, $order->viva_order_code);
+        $this->fakeVerifiedTransaction($transactionId, $order->viva_order_code, 5.00);
+
+        $paymentLogger = Mockery::mock(LoggerInterface::class);
+        $paymentLogger->shouldReceive('log')
+            ->once()
+            ->with('critical', 'viva.payment_received_after_cancellation', Mockery::type('array'));
+        $paymentLogger->shouldReceive('log')
+            ->once()
+            ->with('info', 'viva.webhook_duplicate', Mockery::on(
+                fn (array $context): bool => $context['order_id'] === $order->getKey()
+                    && $context['transaction_id'] === $transactionId,
+            ));
+        Log::shouldReceive('channel')->twice()->with('payments')->andReturn($paymentLogger);
+
+        $this->postJson(route('viva.webhook'), $payload)
+            ->assertOk()
+            ->assertJson(['status' => 'paid']);
+
+        $order->refresh();
+        $paidAt = $order->paid_at?->toDateTimeString();
+        $updatedAt = $order->updated_at->toDateTimeString();
+
+        $this->travel(1)->minute();
+
+        $this->postJson(route('viva.webhook'), $payload)
+            ->assertOk()
+            ->assertJson(['status' => 'duplicate']);
+
+        $order->refresh();
+        $this->assertSame(OrderStatus::Cancelled, $order->status);
+        $this->assertSame('paid', $order->payment_status);
+        $this->assertSame($transactionId, $order->viva_transaction_id);
+        $this->assertSame($paidAt, $order->paid_at?->toDateTimeString());
+        $this->assertSame($updatedAt, $order->updated_at->toDateTimeString());
+        $this->assertSame(1, Order::where('viva_transaction_id', $transactionId)->count());
+        $this->assertDatabaseCount('order_driver_transitions', 0);
     }
 
     public function test_duplicate_webhook_is_idempotent(): void

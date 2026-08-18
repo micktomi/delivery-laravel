@@ -86,6 +86,7 @@ class CreateOrder
                         ? 'pending'
                         : null,
                     'customer_name' => $checkoutData['customer_name'],
+                    'customer_email' => $checkoutData['customer_email'] ?? null,
                     'phone' => $checkoutData['phone'],
                     'address' => $checkoutData['address'],
                     'floor_bell' => $checkoutData['floor_bell'] ?? null,

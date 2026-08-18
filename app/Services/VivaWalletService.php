@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Models\Order;
 use Illuminate\Http\Client\PendingRequest;
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Throwable;
 
 class VivaWalletService
 {
@@ -48,6 +50,13 @@ class VivaWalletService
         if (! preg_match('/^\d{1,32}$/D', $orderCode)) {
             throw new RuntimeException('Viva returned an invalid payment order code.');
         }
+
+        $this->logPaymentEvent('info', 'viva.payment_order_created', [
+            'order_id' => $order->getKey(),
+            'viva_order_code' => $orderCode,
+            'amount_cents' => $amount,
+            'environment' => $this->isDemo() ? 'demo' : 'production',
+        ]);
 
         return $orderCode;
     }
@@ -91,7 +100,7 @@ class VivaWalletService
         $retrievedOrderCode = (string) data_get($transaction, 'orderCode', '');
 
         if (! hash_equals($retrievedOrderCode, $reportedOrderCode)) {
-            Log::warning('viva.webhook_order_mismatch', ['transaction_id' => $transactionId]);
+            $this->logPaymentEvent('warning', 'viva.webhook_order_mismatch', ['transaction_id' => $transactionId]);
 
             return 'ignored';
         }
@@ -128,7 +137,11 @@ class VivaWalletService
             || $status !== 'F'
             || $currency !== self::EURO_CURRENCY_CODE
             || $paidCents === null) {
-            Log::warning('viva.transaction_not_payable', ['transaction_id' => $transactionId]);
+            $this->logPaymentEvent('warning', 'viva.transaction_not_payable', [
+                'transaction_id' => $transactionId,
+                'status' => $status,
+                'currency' => $currency,
+            ]);
 
             return 'ignored';
         }
@@ -140,24 +153,38 @@ class VivaWalletService
                 ->first();
 
             if (! $order || $order->payment_method !== PaymentMethod::Viva) {
-                Log::warning('viva.transaction_order_not_found', ['transaction_id' => $transactionId]);
+                $this->logPaymentEvent('warning', 'viva.transaction_order_not_found', ['transaction_id' => $transactionId]);
 
                 return 'ignored';
             }
 
             if ($paidCents !== $this->orderTotalInCents($order)) {
-                Log::warning('viva.transaction_amount_mismatch', [
+                $this->logPaymentEvent('warning', 'viva.transaction_amount_mismatch', [
                     'order_id' => $order->getKey(),
                     'transaction_id' => $transactionId,
+                    'paid_cents' => $paidCents,
+                    'expected_cents' => $this->orderTotalInCents($order),
                 ]);
 
                 return 'ignored';
             }
 
             if ($order->payment_status === 'paid') {
-                return hash_equals((string) $order->viva_transaction_id, $transactionId)
-                    ? 'duplicate'
-                    : 'ignored';
+                if (hash_equals((string) $order->viva_transaction_id, $transactionId)) {
+                    $this->logPaymentEvent('info', 'viva.webhook_duplicate', [
+                        'order_id' => $order->getKey(),
+                        'transaction_id' => $transactionId,
+                    ]);
+
+                    return 'duplicate';
+                }
+
+                $this->logPaymentEvent('warning', 'viva.paid_order_transaction_mismatch', [
+                    'order_id' => $order->getKey(),
+                    'transaction_id' => $transactionId,
+                ]);
+
+                return 'ignored';
             }
 
             $transactionAlreadyUsed = Order::query()
@@ -166,7 +193,7 @@ class VivaWalletService
                 ->exists();
 
             if ($transactionAlreadyUsed) {
-                Log::warning('viva.transaction_already_used', ['transaction_id' => $transactionId]);
+                $this->logPaymentEvent('warning', 'viva.transaction_already_used', ['transaction_id' => $transactionId]);
 
                 return 'ignored';
             }
@@ -177,13 +204,44 @@ class VivaWalletService
                 'paid_at' => now(),
             ])->save();
 
-            Log::info('viva.payment_confirmed', [
+            if ($order->status === OrderStatus::Cancelled) {
+                $this->logPaymentEvent('critical', 'viva.payment_received_after_cancellation', [
+                    'order_id' => $order->getKey(),
+                    'viva_order_code' => $orderCode,
+                    'transaction_id' => $transactionId,
+                    'action_required' => 'refund_or_manual_review',
+                ]);
+
+                return 'paid';
+            }
+
+            $this->logPaymentEvent('info', 'viva.payment_confirmed', [
                 'order_id' => $order->getKey(),
                 'transaction_id' => $transactionId,
             ]);
 
             return 'paid';
         });
+    }
+
+    /**
+     * Payment logging is best effort: an unavailable log destination must not
+     * roll back or mask an otherwise valid payment state transition.
+     */
+    public function logPaymentEvent(string $level, string $event, array $context = []): void
+    {
+        try {
+            Log::channel('payments')->log($level, $event, $context);
+        } catch (Throwable $e) {
+            try {
+                Log::error('payments.log_write_failed', [
+                    'payment_event' => $event,
+                    'exception' => $e::class,
+                ]);
+            } catch (Throwable) {
+                // Logging cannot be allowed to change payment truth.
+            }
+        }
     }
 
     private function apiClient(): PendingRequest

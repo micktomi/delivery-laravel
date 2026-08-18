@@ -22,7 +22,6 @@ class Category extends Model
         return $this->hasMany(Product::class)->orderBy('sort_order');
     }
 
-
     public function optionGroups(): BelongsToMany
     {
         return $this->belongsToMany(OptionGroup::class, 'category_option_group')

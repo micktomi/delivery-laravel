@@ -25,6 +25,8 @@ class CheckoutPage extends Component
 
     public string $phone = '';
 
+    public string $customer_email = '';
+
     public string $address = '';
 
     public string $floor_bell = '';
@@ -62,6 +64,7 @@ class CheckoutPage extends Component
         }
 
         $this->customer_name = trim($this->customer_name);
+        $this->customer_email = trim($this->customer_email);
         $this->phone = $this->normalisePhone($this->phone);
         $this->address = trim($this->address);
         $this->floor_bell = trim($this->floor_bell);
@@ -69,6 +72,7 @@ class CheckoutPage extends Component
 
         $this->validate([
             'customer_name' => 'required|string|min:2|max:255',
+            'customer_email' => 'nullable|email:rfc|max:255',
             'phone' => ['required', 'string', 'regex:/^(?:69\d{8}|2\d{9})$/'],
             'address' => 'required|string|min:5|max:255',
             'floor_bell' => 'nullable|string|max:100',
@@ -105,6 +109,7 @@ class CheckoutPage extends Component
         try {
             $order = app(CreateOrder::class)->execute([
                 'customer_name' => $this->customer_name,
+                'customer_email' => $this->customer_email ?: null,
                 'phone' => $this->phone,
                 'address' => $this->address,
                 'floor_bell' => $this->floor_bell ?: null,

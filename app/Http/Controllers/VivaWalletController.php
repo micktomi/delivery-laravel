@@ -9,7 +9,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -52,7 +51,7 @@ class VivaWalletController extends Controller
 
             return redirect()->away($viva->checkoutUrl($orderCode));
         } catch (Throwable $e) {
-            Log::error('viva.payment_start_failed', [
+            $viva->logPaymentEvent('error', 'viva.payment_start_failed', [
                 'order_id' => $order->getKey(),
                 'exception' => $e::class,
             ]);
@@ -106,7 +105,7 @@ class VivaWalletController extends Controller
 
             return response()->json(['status' => $result]);
         } catch (Throwable $e) {
-            Log::error('viva.webhook_processing_failed', [
+            $viva->logPaymentEvent('error', 'viva.webhook_processing_failed', [
                 'transaction_id' => Str::isUuid($transactionId) ? $transactionId : null,
                 'exception' => $e::class,
             ]);

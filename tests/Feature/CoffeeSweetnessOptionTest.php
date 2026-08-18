@@ -13,6 +13,7 @@ use App\Models\Product;
 use App\Models\User;
 use App\Services\CartService;
 use App\Services\OptionsPresenter;
+use Database\Seeders\BrownSugarSweetenerSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -87,7 +88,7 @@ class CoffeeSweetnessOptionTest extends TestCase
         ]);
 
         // Re-running the seeder must not duplicate the row.
-        $this->seed(\Database\Seeders\BrownSugarSweetenerSeeder::class);
+        $this->seed(BrownSugarSweetenerSeeder::class);
         $this->assertSame(1, OptionValue::where('option_group_id', $group->id)
             ->where('name', 'Καστανή ζάχαρη')->count());
     }
