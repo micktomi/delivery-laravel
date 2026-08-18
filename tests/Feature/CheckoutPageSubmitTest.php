@@ -8,6 +8,7 @@ use App\Livewire\CheckoutPage;
 use App\Models\Category;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\StoreSetting;
 use App\Services\CartService;
 use App\Services\PricingService;
 use Carbon\CarbonImmutable;
@@ -260,8 +261,10 @@ class CheckoutPageSubmitTest extends TestCase
 
     public function test_closed_store_rejects_checkout_without_order_or_viva_flow(): void
     {
-        config()->set('store.accepting_orders', false);
-        config()->set('store.closed_message', 'Το κατάστημα έκλεισε για σήμερα.');
+        StoreSetting::current()->update([
+            'accepting_orders' => false,
+            'closed_message' => 'Το κατάστημα έκλεισε για σήμερα.',
+        ]);
         config()->set('services.viva.enabled', true);
         Http::fake();
         $this->seedCart();
@@ -282,9 +285,11 @@ class CheckoutPageSubmitTest extends TestCase
         CarbonImmutable::setTestNow(
             CarbonImmutable::parse('2026-08-17 10:00', 'Europe/Athens'),
         );
-        config()->set('store.accepting_orders', true);
-        config()->set('store.opening_hours', [
-            'monday' => [['09:00', '11:00']],
+        StoreSetting::current()->update([
+            'accepting_orders' => true,
+            'opening_hours' => [
+                'monday' => [['09:00', '11:00']],
+            ],
         ]);
         $this->seedCart();
 

@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\StoreSetting;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 
@@ -104,7 +105,7 @@ final class StoreSchedule
 
     public function closedMessage(): ?string
     {
-        $message = trim((string) config('store.closed_message', ''));
+        $message = trim((string) StoreSetting::current()->closed_message);
 
         return $message === '' ? null : $message;
     }
@@ -120,10 +121,7 @@ final class StoreSchedule
 
     private function manualOverrideAllowsOrders(): bool
     {
-        return filter_var(
-            config('store.accepting_orders', true),
-            FILTER_VALIDATE_BOOL,
-        );
+        return StoreSetting::current()->accepting_orders;
     }
 
     /**
@@ -134,7 +132,7 @@ final class StoreSchedule
      */
     private function openingHours(): ?array
     {
-        $openingHours = config('store.opening_hours');
+        $openingHours = StoreSetting::current()->opening_hours;
 
         if ($openingHours === null || $openingHours === '') {
             return null;

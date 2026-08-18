@@ -2,12 +2,16 @@
 
 namespace Tests\Unit;
 
+use App\Models\StoreSetting;
 use App\Support\StoreSchedule;
 use Carbon\CarbonImmutable;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class StoreScheduleTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_normal_same_day_interval_is_open(): void
     {
         $this->configure([
@@ -70,6 +74,26 @@ class StoreScheduleTest extends TestCase
         $this->assertNull($schedule->nextOpeningAt($this->at('2026-08-17 10:00')));
     }
 
+    public function test_explicitly_closed_day_is_closed(): void
+    {
+        $this->configure([
+            'monday' => [],
+        ]);
+
+        $this->assertFalse($this->schedule()->isAcceptingOrders($this->at('2026-08-17 10:00')));
+    }
+
+    public function test_persisted_settings_are_the_runtime_source_of_truth(): void
+    {
+        $this->configure([
+            'monday' => [['07:00', '15:00']],
+        ]);
+        config()->set('store.accepting_orders', false);
+        config()->set('store.opening_hours', []);
+
+        $this->assertTrue($this->schedule()->isAcceptingOrders($this->at('2026-08-17 10:00')));
+    }
+
     public function test_next_opening_at_returns_the_next_interval_in_athens(): void
     {
         $this->configure([
@@ -91,9 +115,10 @@ class StoreScheduleTest extends TestCase
      */
     private function configure(array $openingHours, bool $acceptingOrders = true): void
     {
-        config()->set('store.accepting_orders', $acceptingOrders);
-        config()->set('store.opening_hours', $openingHours);
-        config()->set('store.timezone', 'Europe/Athens');
+        StoreSetting::current()->update([
+            'accepting_orders' => $acceptingOrders,
+            'opening_hours' => $openingHours,
+        ]);
     }
 
     private function schedule(): StoreSchedule

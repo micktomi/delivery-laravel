@@ -14,9 +14,11 @@ class AdminDashboardTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
 
-        $this->actingAs($admin)
+        $response = $this->actingAs($admin)
             ->get('/admin')
             ->assertOk()
+            ->assertSee('Κατάσταση Παραγγελιών')
+            ->assertSee('Παύση παραγγελιών')
             ->assertSee('Delivery Menu')
             ->assertSee('Διαχείριση καταλόγου και παραγγελιών')
             ->assertSee('Προβολή δημόσιου μενού')
@@ -31,5 +33,10 @@ class AdminDashboardTest extends TestCase
             ->assertDontSee('github.com/filamentphp/filament')
             ->assertDontSee('fi-filament-info-widget')
             ->assertDontSee('aria-label="Filament"', false);
+
+        $this->assertLessThan(
+            strpos($response->getContent(), 'data-delivery-menu-dashboard-card'),
+            strpos($response->getContent(), 'data-store-orders-status'),
+        );
     }
 }
