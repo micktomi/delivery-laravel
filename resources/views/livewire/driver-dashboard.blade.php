@@ -1,11 +1,39 @@
-<main wire:poll.15s class="min-h-dvh bg-[var(--sunken)] pb-8">
+@php
+    $notificationOrderIds = $activeOrder
+        ? [$activeOrder->getKey()]
+        : $availableOrders->modelKeys();
+@endphp
+
+<main
+    wire:poll.15s
+    x-data="driverOrderNotifications({{ $driver->getKey() }})"
+    class="min-h-dvh bg-[var(--sunken)] pb-8"
+>
+    <span
+        wire:key="driver-notification-orders-{{ $notificationOrderIds === [] ? 'none' : implode('-', $notificationOrderIds) }}"
+        x-init="syncOrders(@js($notificationOrderIds))"
+        class="hidden"
+        aria-hidden="true"
+    ></span>
     <header class="border-b border-[var(--hairline)] bg-white px-4 py-4">
-        <div class="mx-auto flex max-w-lg items-center justify-between gap-4">
+        <div class="mx-auto flex max-w-lg flex-wrap items-center justify-between gap-4">
             <div>
                 <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--accent-text)]">Οδηγός</p>
                 <h1 class="font-display mt-0.5 text-lg font-extrabold tracking-tight">Γεια σου, {{ $driver->name }}</h1>
             </div>
-            <button wire:click="endShift" type="button" class="rounded-lg border border-[var(--hairline)] px-3 py-2 text-xs font-semibold text-[var(--ink-soft)]">Λήξη βάρδιας</button>
+            <div class="ml-auto flex shrink-0 items-center gap-2">
+                <button
+                    type="button"
+                    x-on:click="enableSound()"
+                    x-bind:disabled="soundEnabled || soundUnavailable"
+                    x-bind:class="soundControlClass()"
+                    class="rounded-lg px-3 py-2 text-xs font-bold transition"
+                    aria-live="polite"
+                >
+                    <span x-text="soundStatusLabel()">🔔 Ενεργοποίηση ήχου</span>
+                </button>
+                <button wire:click="endShift" type="button" class="rounded-lg border border-[var(--hairline)] px-3 py-2 text-xs font-semibold text-[var(--ink-soft)]">Λήξη βάρδιας</button>
+            </div>
         </div>
     </header>
 
@@ -19,8 +47,17 @@
                 $dialPhone = preg_replace('/[^\d+]/', '', $activeOrder->phone);
                 $mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination='.rawurlencode($activeOrder->address);
             @endphp
-            <section class="overflow-hidden rounded-3xl border border-[var(--hairline)] bg-white shadow-[0_18px_40px_-28px_rgb(28_18_6_/_0.35)]">
+            <section
+                data-driver-order-id="{{ $activeOrder->id }}"
+                x-bind:class="orderHighlightClass({{ $activeOrder->id }})"
+                class="overflow-hidden rounded-3xl border border-[var(--hairline)] bg-white shadow-[0_18px_40px_-28px_rgb(28_18_6_/_0.35)] transition"
+            >
                 <div class="border-b border-[var(--hairline)] bg-[var(--accent-light)] px-5 py-4">
+                    <span
+                        x-show="isHighlighted({{ $activeOrder->id }})"
+                        x-cloak
+                        class="mb-2 inline-flex rounded-full bg-amber-500 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white"
+                    >Νέα ανάθεση</span>
                     <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--accent-text)]">Ενεργή διανομή</p>
                     <div class="mt-1 flex items-baseline justify-between gap-3">
                         <h2 class="font-display text-2xl font-extrabold">#{{ str_pad($activeOrder->display_number, 3, '0', STR_PAD_LEFT) }}</h2>
@@ -79,7 +116,16 @@
 
                 <div class="space-y-3">
                     @forelse($availableOrders as $order)
-                        <article class="rounded-2xl border border-[var(--hairline)] bg-white p-4 shadow-sm">
+                        <article
+                            data-driver-order-id="{{ $order->id }}"
+                            x-bind:class="orderHighlightClass({{ $order->id }})"
+                            class="rounded-2xl border border-[var(--hairline)] bg-white p-4 shadow-sm transition"
+                        >
+                            <span
+                                x-show="isHighlighted({{ $order->id }})"
+                                x-cloak
+                                class="mb-2 inline-flex rounded-full bg-amber-500 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white"
+                            >Νέα παραγγελία</span>
                             <div class="flex items-start justify-between gap-4">
                                 <div class="min-w-0">
                                     <p class="font-display text-xl font-extrabold">#{{ str_pad($order->display_number, 3, '0', STR_PAD_LEFT) }}</p>

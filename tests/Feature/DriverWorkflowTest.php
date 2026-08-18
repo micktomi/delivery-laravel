@@ -74,6 +74,43 @@ class DriverWorkflowTest extends TestCase
         $this->assertStringContainsString('Παρέλαβα την παραγγελία', $html);
     }
 
+    public function test_available_delivery_is_registered_for_visual_and_sound_notification(): void
+    {
+        $driver = Driver::factory()->create();
+        $order = Order::factory()->status(OrderStatus::Ready)->create();
+
+        $html = Livewire::actingAs($driver, 'driver')
+            ->test(DriverDashboard::class)
+            ->html();
+
+        $this->assertStringContainsString('x-data="driverOrderNotifications('.$driver->id.')"', $html);
+        $this->assertStringContainsString('wire:key="driver-notification-orders-'.$order->id.'"', $html);
+        $this->assertStringContainsString('data-driver-order-id="'.$order->id.'"', $html);
+        $this->assertMatchesRegularExpression(
+            '/<button\\s+type="button"\\s+x-on:click="enableSound\\(\\)"/',
+            $html,
+        );
+        $this->assertSame(1, substr_count($html, 'x-text="soundStatusLabel()"'));
+        $this->assertStringContainsString('Ενεργοποίηση ήχου', $html);
+        $this->assertStringContainsString('Νέα παραγγελία', $html);
+    }
+
+    public function test_assigned_delivery_is_registered_for_notification_without_state_change(): void
+    {
+        $driver = Driver::factory()->create();
+        $order = Order::factory()->status(OrderStatus::Ready)->create();
+        app(TransitionDriverDelivery::class)->claim($order->id, $driver);
+
+        $html = Livewire::actingAs($driver, 'driver')
+            ->test(DriverDashboard::class)
+            ->html();
+
+        $this->assertStringContainsString('wire:key="driver-notification-orders-'.$order->id.'"', $html);
+        $this->assertStringContainsString('data-driver-order-id="'.$order->id.'"', $html);
+        $this->assertStringContainsString('Νέα ανάθεση', $html);
+        $this->assertSame(DeliveryStatus::Assigned, $order->fresh()->delivery_status);
+    }
+
     public static function courierPaymentInstructions(): array
     {
         return [
