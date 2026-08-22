@@ -13,6 +13,7 @@ use App\Services\CartService;
 use App\Services\OptionsPresenter;
 use App\Services\PricingService;
 use App\Support\StoreSchedule;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Livewire\Component;
 
@@ -21,6 +22,11 @@ class MenuPage extends Component
     private const LATEST_PUBLIC_ORDER_SESSION_KEY = 'latest_public_order_route_key';
 
     private const MAX_ITEM_NOTES = 255;
+
+    /** Unknown codes allowed from one browser session before the form stops answering. */
+    private const MAX_COUPON_ATTEMPTS = 10;
+
+    private const COUPON_ATTEMPT_WINDOW = 600;
 
     public array $cart = [];
 
@@ -240,9 +246,30 @@ class MenuPage extends Component
             return;
         }
 
+        // Codes are short and handed out at the counter, so this form must not
+        // double as a way of discovering them by typing. Only an unknown code
+        // counts as a guess: a real code that no longer qualifies belongs to a
+        // customer who was given it.
+        //
+        // Counted per browser session rather than per address, so a whole
+        // street behind one carrier NAT does not share one budget. The session
+        // id is hashed on the way into the key: it is a live credential and
+        // has no business sitting in a cache key.
+        $limiterKey = 'coupon-attempts:'.hash('sha256', session()->getId());
+
+        if (RateLimiter::tooManyAttempts($limiterKey, self::MAX_COUPON_ATTEMPTS)) {
+            $minutes = max(1, (int) ceil(RateLimiter::availableIn($limiterKey) / 60));
+
+            $this->couponError = 'Πολλές δοκιμές κωδικού. Δοκιμάστε ξανά σε '.$minutes.' λεπτά.';
+
+            return;
+        }
+
         $coupon = Coupon::findByCode($code);
 
         if (! $coupon) {
+            RateLimiter::hit($limiterKey, self::COUPON_ATTEMPT_WINDOW);
+
             $this->couponError = 'Άγνωστος κωδικός κουπονιού.';
 
             return;
@@ -256,6 +283,8 @@ class MenuPage extends Component
             return;
         }
 
+        // The counter is deliberately left standing: landing one real code must
+        // not wipe the record of the guesses that came before it.
         $cart->applyCoupon($coupon);
         $this->couponInput = '';
     }

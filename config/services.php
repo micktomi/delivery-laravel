@@ -42,6 +42,11 @@ return [
         'source_code' => env('VIVA_SOURCE_CODE'),
         'environment' => env('VIVA_ENVIRONMENT', 'demo'),
         'webhook_verification_key' => env('VIVA_WEBHOOK_VERIFICATION_KEY'),
+        // Optional HTTP Basic credentials, set on the webhook in the Viva
+        // dashboard. Leaving either blank keeps the endpoint anonymous, so an
+        // existing deployment is not cut off by upgrading.
+        'webhook_username' => env('VIVA_WEBHOOK_USERNAME'),
+        'webhook_password' => env('VIVA_WEBHOOK_PASSWORD'),
     ],
 
 ];

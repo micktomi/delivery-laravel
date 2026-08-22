@@ -8,12 +8,18 @@ use App\Models\Coupon;
 use App\Models\Product;
 use App\Services\CartService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\RateLimiter;
+use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\TestCase;
 
 class CartCouponTest extends TestCase
 {
     use RefreshDatabase;
+
+    private const SESSION_ONE = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+    private const SESSION_TWO = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
     private function product(string $price = '10.00'): Product
     {
@@ -89,6 +95,136 @@ class CartCouponTest extends TestCase
         $this->assertNull($this->cart()->couponCode());
         $this->assertSame(0.00, $this->cart()->totals()['discount']);
         $this->assertCount(1, $this->cart()->items());
+    }
+
+    public function test_guessing_unknown_codes_is_cut_off_after_ten_tries(): void
+    {
+        $product = $this->product('10.00');
+        $this->realCoupon();
+
+        $component = Livewire::test(MenuPage::class)->call('addDirectly', $product->id);
+
+        $this->guess($component, 10);
+
+        // The eleventh is refused without the code being looked up at all, so a
+        // code that does exist cannot be confirmed while the window is open.
+        $component->set('couponInput', 'REAL10')->call('applyCoupon');
+
+        $this->assertStringStartsWith('Πολλές δοκιμές κωδικού.', (string) $component->get('couponError'));
+        $this->assertNull($this->cart()->couponCode());
+    }
+
+    public function test_a_code_that_exists_but_no_longer_qualifies_is_not_counted_as_a_guess(): void
+    {
+        $product = $this->product('10.00');
+        Coupon::create([
+            'code' => 'EXPIRED',
+            'type' => 'fixed',
+            'value' => '1.00',
+            'expires_at' => now()->subDay(),
+            'is_active' => true,
+        ]);
+        $this->realCoupon();
+
+        $component = Livewire::test(MenuPage::class)->call('addDirectly', $product->id);
+
+        for ($attempt = 0; $attempt < 12; $attempt++) {
+            $component->set('couponInput', 'EXPIRED')->call('applyCoupon');
+        }
+
+        $component->set('couponInput', 'REAL10')
+            ->call('applyCoupon')
+            ->assertSet('couponError', null);
+
+        $this->assertSame('REAL10', $this->cart()->couponCode());
+    }
+
+    public function test_a_real_code_does_not_reset_the_guesses_that_came_before_it(): void
+    {
+        $product = $this->product('10.00');
+        $this->realCoupon();
+
+        $component = Livewire::test(MenuPage::class)->call('addDirectly', $product->id);
+
+        $this->guess($component, 9);
+
+        $component->set('couponInput', 'REAL10')
+            ->call('applyCoupon')
+            ->assertSet('couponError', null);
+
+        $this->assertSame('REAL10', $this->cart()->couponCode());
+
+        // Landing a real code spent none of the budget back: one guess is left,
+        // and the one after it is refused.
+        $this->guess($component, 1);
+
+        $component->set('couponInput', 'STILLNOPE')->call('applyCoupon');
+
+        $this->assertStringStartsWith('Πολλές δοκιμές κωδικού.', (string) $component->get('couponError'));
+    }
+
+    public function test_a_second_session_keeps_its_own_budget_on_the_same_address(): void
+    {
+        $product = $this->product('10.00');
+        $this->realCoupon();
+
+        // Session ids are only accepted at 40 alphanumeric characters; anything
+        // else is silently swapped for a fresh random one.
+        $this->useSession(self::SESSION_ONE);
+
+        $component = Livewire::test(MenuPage::class)->call('addDirectly', $product->id);
+        $this->guess($component, 10);
+
+        $component->set('couponInput', 'NOPE')->call('applyCoupon');
+        $this->assertStringStartsWith('Πολλές δοκιμές κωδικού.', (string) $component->get('couponError'));
+
+        // Same test client, same 127.0.0.1, different browser session.
+        $this->useSession(self::SESSION_TWO);
+
+        Livewire::test(MenuPage::class)
+            ->set('couponInput', 'NOPE')
+            ->call('applyCoupon')
+            ->assertSet('couponError', 'Άγνωστος κωδικός κουπονιού.');
+    }
+
+    public function test_the_rate_limit_key_does_not_carry_the_raw_session_id(): void
+    {
+        $product = $this->product('10.00');
+        $this->useSession(self::SESSION_ONE);
+
+        Livewire::test(MenuPage::class)
+            ->call('addDirectly', $product->id)
+            ->set('couponInput', 'NOPE')
+            ->call('applyCoupon');
+
+        $this->assertSame(1, RateLimiter::attempts('coupon-attempts:'.hash('sha256', self::SESSION_ONE)));
+        $this->assertSame(0, RateLimiter::attempts('coupon-attempts:'.self::SESSION_ONE));
+    }
+
+    private function useSession(string $id): void
+    {
+        session()->setId($id);
+
+        $this->assertSame($id, session()->getId());
+    }
+
+    private function realCoupon(): Coupon
+    {
+        return Coupon::create([
+            'code' => 'REAL10',
+            'type' => 'fixed',
+            'value' => '1.00',
+            'is_active' => true,
+        ]);
+    }
+
+    private function guess(Testable $component, int $times): void
+    {
+        foreach (range(1, $times) as $attempt) {
+            $component->set('couponInput', 'GUESS'.$attempt.'-'.uniqid())
+                ->call('applyCoupon')
+                ->assertSet('couponError', 'Άγνωστος κωδικός κουπονιού.');
+        }
     }
 
     public function test_an_empty_code_is_rejected(): void

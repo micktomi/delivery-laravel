@@ -169,7 +169,14 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE'),
+    // Defaults to on in production rather than to null: a deployed .env that
+    // forgets the variable should not silently hand the session cookie out
+    // over plain HTTP. A missing APP_ENV is read as production for the same
+    // reason. Set SESSION_SECURE_COOKIE=false to override.
+    'secure' => env(
+        'SESSION_SECURE_COOKIE',
+        env('APP_ENV', 'production') === 'production',
+    ),
 
     /*
     |--------------------------------------------------------------------------

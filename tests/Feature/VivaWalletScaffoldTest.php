@@ -20,6 +20,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 use Mockery;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Psr\Log\LoggerInterface;
 use Tests\TestCase;
 
@@ -474,6 +475,126 @@ class VivaWalletScaffoldTest extends TestCase
                 'currencyCode' => '978',
             ]),
         ]);
+    }
+
+    public function test_webhook_stays_open_when_no_basic_credentials_are_configured(): void
+    {
+        config()->set('services.viva.webhook_username', null);
+        config()->set('services.viva.webhook_password', null);
+
+        $order = $this->vivaOrder();
+        $transactionId = (string) Str::uuid();
+        $this->fakeVerifiedTransaction($transactionId, $order->viva_order_code, 5.00);
+
+        $this->postJson(route('viva.webhook'), $this->webhookPayload($transactionId, $order->viva_order_code))
+            ->assertOk()
+            ->assertJson(['status' => 'paid']);
+    }
+
+    public function test_configured_webhook_credentials_refuse_an_anonymous_post(): void
+    {
+        config()->set('services.viva.webhook_username', 'viva-hook');
+        config()->set('services.viva.webhook_password', 'correct-horse');
+
+        $order = $this->vivaOrder();
+        $transactionId = (string) Str::uuid();
+        $this->fakeVerifiedTransaction($transactionId, $order->viva_order_code, 5.00);
+
+        $this->postJson(route('viva.webhook'), $this->webhookPayload($transactionId, $order->viva_order_code))
+            ->assertUnauthorized();
+
+        $order->refresh();
+        $this->assertNotSame('paid', $order->payment_status);
+        $this->assertNull($order->paid_at);
+
+        // Refused before anything is asked of Viva.
+        Http::assertNothingSent();
+    }
+
+    public function test_configured_webhook_credentials_refuse_a_wrong_password(): void
+    {
+        config()->set('services.viva.webhook_username', 'viva-hook');
+        config()->set('services.viva.webhook_password', 'correct-horse');
+
+        $order = $this->vivaOrder();
+        $transactionId = (string) Str::uuid();
+        $this->fakeVerifiedTransaction($transactionId, $order->viva_order_code, 5.00);
+
+        $this->withBasicAuth('viva-hook', 'battery-staple')
+            ->postJson(route('viva.webhook'), $this->webhookPayload($transactionId, $order->viva_order_code))
+            ->assertUnauthorized();
+
+        $this->assertNotSame('paid', $order->refresh()->payment_status);
+        Http::assertNothingSent();
+    }
+
+    public function test_configured_webhook_credentials_refuse_a_wrong_username(): void
+    {
+        config()->set('services.viva.webhook_username', 'viva-hook');
+        config()->set('services.viva.webhook_password', 'correct-horse');
+
+        $order = $this->vivaOrder();
+        $transactionId = (string) Str::uuid();
+        $this->fakeVerifiedTransaction($transactionId, $order->viva_order_code, 5.00);
+
+        $this->withBasicAuth('not-the-hook', 'correct-horse')
+            ->postJson(route('viva.webhook'), $this->webhookPayload($transactionId, $order->viva_order_code))
+            ->assertUnauthorized();
+
+        $this->assertNotSame('paid', $order->refresh()->payment_status);
+        Http::assertNothingSent();
+    }
+
+    /**
+     * @return array<string, array{0: ?string, 1: ?string}>
+     */
+    public static function partialWebhookCredentials(): array
+    {
+        return [
+            'username without password' => ['viva-hook', null],
+            'password without username' => [null, 'correct-horse'],
+            'username with a blank password' => ['viva-hook', ''],
+            'password with a blank username' => ['', 'correct-horse'],
+        ];
+    }
+
+    #[DataProvider('partialWebhookCredentials')]
+    public function test_half_configured_webhook_credentials_fail_closed(?string $username, ?string $password): void
+    {
+        config()->set('services.viva.webhook_username', $username);
+        config()->set('services.viva.webhook_password', $password);
+
+        $order = $this->vivaOrder();
+        $transactionId = (string) Str::uuid();
+        $this->fakeVerifiedTransaction($transactionId, $order->viva_order_code, 5.00);
+
+        // Correct-looking credentials do not rescue a half-finished setup.
+        $this->withBasicAuth('viva-hook', 'correct-horse')
+            ->postJson(route('viva.webhook'), $this->webhookPayload($transactionId, $order->viva_order_code))
+            ->assertStatus(500);
+
+        $order->refresh();
+        $this->assertNotSame('paid', $order->payment_status);
+        $this->assertNull($order->paid_at);
+
+        Http::assertNothingSent();
+    }
+
+    public function test_configured_webhook_credentials_let_the_real_call_through(): void
+    {
+        config()->set('services.viva.webhook_username', 'viva-hook');
+        config()->set('services.viva.webhook_password', 'correct-horse');
+
+        $order = $this->vivaOrder();
+        $transactionId = (string) Str::uuid();
+        $this->fakeVerifiedTransaction($transactionId, $order->viva_order_code, 5.00);
+
+        $this->withBasicAuth('viva-hook', 'correct-horse')
+            ->postJson(route('viva.webhook'), $this->webhookPayload($transactionId, $order->viva_order_code))
+            ->assertOk()
+            ->assertJson(['status' => 'paid']);
+
+        $this->assertSame('paid', $order->refresh()->payment_status);
     }
 
     private function webhookPayload(string $transactionId, string $orderCode): array

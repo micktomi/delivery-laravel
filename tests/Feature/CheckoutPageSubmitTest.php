@@ -246,17 +246,17 @@ class CheckoutPageSubmitTest extends TestCase
     /** S1: order flooding is throttled per IP. */
     public function test_orders_are_rate_limited_per_ip(): void
     {
-        for ($i = 0; $i < 5; $i++) {
+        for ($i = 0; $i < 20; $i++) {
             $this->seedCart();
             $this->fill()->call('submit')->assertHasNoErrors();
         }
 
-        $this->assertDatabaseCount('orders', 5);
+        $this->assertDatabaseCount('orders', 20);
 
         $this->seedCart();
         $this->fill()->call('submit')->assertHasErrors(['checkout']);
 
-        $this->assertDatabaseCount('orders', 5);
+        $this->assertDatabaseCount('orders', 20);
     }
 
     public function test_closed_store_rejects_checkout_without_order_or_viva_flow(): void

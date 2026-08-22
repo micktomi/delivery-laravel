@@ -27,6 +27,7 @@ class DriverWorkflowTest extends TestCase
         $driver = Driver::factory()->create(['pin' => Hash::make('654321')]);
 
         Livewire::test(DriverLogin::class)
+            ->set('driverId', (string) $driver->id)
             ->set('pin', '654321')
             ->call('login')
             ->assertHasNoErrors()
@@ -36,6 +37,70 @@ class DriverWorkflowTest extends TestCase
         $this->assertNotSame('654321', $driver->fresh()->pin);
         $this->assertTrue(Hash::check('654321', $driver->fresh()->pin));
         $this->assertDatabaseHas('driver_shifts', ['driver_id' => $driver->id, 'ended_at' => null]);
+    }
+
+    public function test_driver_login_requires_the_pin_of_the_selected_driver(): void
+    {
+        $driver = Driver::factory()->create(['pin' => Hash::make('654321')]);
+        $colleague = Driver::factory()->create(['pin' => Hash::make('111222')]);
+
+        Livewire::test(DriverLogin::class)
+            ->set('driverId', (string) $driver->id)
+            ->set('pin', '111222')
+            ->call('login')
+            ->assertHasErrors('pin')
+            ->assertNoRedirect();
+
+        $this->assertGuest('driver');
+        $this->assertDatabaseCount('driver_shifts', 0);
+        $this->assertTrue(Hash::check('111222', $colleague->fresh()->pin));
+    }
+
+    public function test_driver_login_requires_a_driver_to_be_chosen(): void
+    {
+        Driver::factory()->create(['pin' => Hash::make('654321')]);
+
+        Livewire::test(DriverLogin::class)
+            ->set('pin', '654321')
+            ->call('login')
+            ->assertHasErrors('driverId');
+
+        $this->assertGuest('driver');
+    }
+
+    public function test_inactive_drivers_cannot_be_selected(): void
+    {
+        $driver = Driver::factory()->create(['pin' => Hash::make('654321'), 'is_active' => false]);
+
+        Livewire::test(DriverLogin::class)
+            ->assertDontSee($driver->name)
+            ->set('driverId', (string) $driver->id)
+            ->set('pin', '654321')
+            ->call('login')
+            ->assertHasErrors('driverId');
+
+        $this->assertGuest('driver');
+    }
+
+    public function test_driver_login_locks_out_after_five_failed_attempts(): void
+    {
+        $driver = Driver::factory()->create(['pin' => Hash::make('654321')]);
+
+        $component = Livewire::test(DriverLogin::class)->set('driverId', (string) $driver->id);
+
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            $component->set('pin', '000000')->call('login')->assertHasErrors('pin');
+        }
+
+        // The sixth attempt is refused before the PIN is looked at, so the
+        // correct one does not get through either while the window is open.
+        $component->set('pin', '654321')
+            ->call('login')
+            ->assertHasErrors('pin')
+            ->assertNoRedirect();
+
+        $this->assertGuest('driver');
+        $this->assertDatabaseCount('driver_shifts', 0);
     }
 
     public function test_driver_routes_redirect_guests_to_driver_login(): void

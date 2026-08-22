@@ -7,10 +7,21 @@ use App\Models\DriverShift;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Validation\Rule;
 use Livewire\Component;
 
 class DriverLogin extends Component
 {
+    /** Failed attempts from one device before the PIN stops being checked at all. */
+    private const MAX_ATTEMPTS_PER_DEVICE = 5;
+
+    /** Backstop for the same driver guessed at from rotating addresses. */
+    private const MAX_ATTEMPTS_PER_DRIVER = 20;
+
+    private const LOCKOUT_WINDOW = 900;
+
+    public string $driverId = '';
+
     public string $pin = '';
 
     public function mount(): void
@@ -23,29 +34,51 @@ class DriverLogin extends Component
     public function login(): void
     {
         $this->validate([
+            'driverId' => ['required', Rule::exists('drivers', 'id')->where('is_active', true)],
             'pin' => ['required', 'digits:6'],
+        ], [
+            'driverId.required' => 'Διάλεξε το όνομά σου.',
+            'driverId.exists' => 'Διάλεξε το όνομά σου.',
         ]);
 
-        $key = 'driver-login:'.request()->ip();
-        if (RateLimiter::tooManyAttempts($key, 5)) {
-            $this->addError('pin', 'Πάρα πολλές προσπάθειες. Δοκιμάστε ξανά σε '.RateLimiter::availableIn($key).' δευτερόλεπτα.');
+        $driver = Driver::query()
+            ->where('is_active', true)
+            ->whereKey((int) $this->driverId)
+            ->first();
+
+        if (! $driver) {
+            $this->addError('driverId', 'Διάλεξε το όνομά σου.');
 
             return;
         }
 
-        $driver = Driver::query()
-            ->where('is_active', true)
-            ->get()
-            ->first(fn (Driver $candidate): bool => Hash::check($this->pin, $candidate->pin));
+        // Naming the driver first is what makes the counting work: one hash is
+        // checked per attempt, and the attempts belong to that one account
+        // rather than to a PIN that any of the drivers might have owned.
+        $accountKey = 'driver-login:'.$driver->getKey();
+        $deviceKey = $accountKey.':'.request()->ip();
 
-        if (! $driver) {
-            RateLimiter::hit($key, 60);
+        foreach ([[$deviceKey, self::MAX_ATTEMPTS_PER_DEVICE], [$accountKey, self::MAX_ATTEMPTS_PER_DRIVER]] as [$key, $maximum]) {
+            if (RateLimiter::tooManyAttempts($key, $maximum)) {
+                $this->addError('pin', 'Πάρα πολλές προσπάθειες. Δοκιμάστε ξανά σε '
+                    .$this->waitText(RateLimiter::availableIn($key)).'.');
+
+                return;
+            }
+        }
+
+        if (! Hash::check($this->pin, $driver->pin)) {
+            RateLimiter::hit($deviceKey, self::LOCKOUT_WINDOW);
+            RateLimiter::hit($accountKey, self::LOCKOUT_WINDOW);
+
             $this->addError('pin', 'Ο κωδικός PIN δεν είναι σωστός.');
 
             return;
         }
 
-        RateLimiter::clear($key);
+        RateLimiter::clear($deviceKey);
+        RateLimiter::clear($accountKey);
+
         Auth::guard('driver')->login($driver);
         session()->regenerate();
 
@@ -59,8 +92,20 @@ class DriverLogin extends Component
         $this->redirectRoute('driver.dashboard');
     }
 
+    private function waitText(int $seconds): string
+    {
+        return $seconds >= 60
+            ? max(1, (int) ceil($seconds / 60)).' λεπτά'
+            : max(1, $seconds).' δευτερόλεπτα';
+    }
+
     public function render()
     {
-        return view('livewire.driver-login')->layout('layouts.app');
+        return view('livewire.driver-login', [
+            'drivers' => Driver::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name']),
+        ])->layout('layouts.app');
     }
 }

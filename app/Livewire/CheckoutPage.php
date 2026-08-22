@@ -18,7 +18,7 @@ class CheckoutPage extends Component
     private const LATEST_PUBLIC_ORDER_SESSION_KEY = 'latest_public_order_route_key';
 
     /** Orders allowed from one IP inside RATE_LIMIT_WINDOW seconds. */
-    private const MAX_ORDERS_PER_WINDOW = 5;
+    private const MAX_ORDERS_PER_WINDOW = 20;
 
     private const RATE_LIMIT_WINDOW = 900;
 
