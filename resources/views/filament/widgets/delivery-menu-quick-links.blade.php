@@ -13,6 +13,9 @@
                 <x-filament::link color="primary" href="{{ route('kitchen') }}" icon="heroicon-m-queue-list">
                     Kitchen board
                 </x-filament::link>
+                <x-filament::link color="primary" href="{{ route('driver.dashboard') }}" icon="heroicon-m-truck">
+                    Driver
+                </x-filament::link>
                 <x-filament::link color="primary" href="{{ route('filament.admin.resources.orders.index') }}" icon="heroicon-m-clipboard-document-list">
                     Παραγγελίες
                 </x-filament::link>
