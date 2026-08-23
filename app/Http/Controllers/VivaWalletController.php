@@ -97,8 +97,6 @@ class VivaWalletController extends Controller
 
     public function webhook(Request $request, VivaWalletService $viva): JsonResponse
     {
-        $this->assertWebhookCredentials($request, $viva);
-
         $payload = $request->all();
         $transactionId = strtolower((string) data_get($payload, 'EventData.TransactionId', ''));
 
@@ -115,43 +113,6 @@ class VivaWalletController extends Controller
             // A non-2xx response asks Viva to retry a transient API/database failure.
             return response()->json(['status' => 'retry'], 503);
         }
-    }
-
-    /**
-     * The payload itself proves nothing — the transaction is always re-read
-     * from Viva before anything is marked paid — but an anonymous endpoint
-     * still lets a stranger drive that outbound call. When Basic credentials
-     * are configured on the webhook in the Viva dashboard, they are required
-     * here; with none configured the endpoint behaves exactly as before.
-     */
-    private function assertWebhookCredentials(Request $request, VivaWalletService $viva): void
-    {
-        $username = (string) config('services.viva.webhook_username');
-        $password = (string) config('services.viva.webhook_password');
-
-        // Neither set: the endpoint stays anonymous, exactly as it was before
-        // the option existed.
-        if ($username === '' && $password === '') {
-            return;
-        }
-
-        // One of the two set is a half-finished deployment rather than a
-        // decision. Refuse instead of guessing which way it was meant, and
-        // refuse here, before Viva is asked anything.
-        if ($username === '' || $password === '') {
-            $viva->logPaymentEvent('error', 'viva.webhook_credentials_misconfigured', [
-                'missing' => $username === '' ? 'username' : 'password',
-            ]);
-
-            abort(500);
-        }
-
-        // Both comparisons run before the verdict, so a wrong username cannot
-        // be told apart from a wrong password by how long the reply took.
-        $matchesUsername = hash_equals($username, (string) $request->getUser());
-        $matchesPassword = hash_equals($password, (string) $request->getPassword());
-
-        abort_unless($matchesUsername && $matchesPassword, 401);
     }
 
     private function returnOrder(Request $request): Order

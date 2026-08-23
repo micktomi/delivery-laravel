@@ -26,6 +26,9 @@ class MenuPage extends Component
     /** Unknown codes allowed from one browser session before the form stops answering. */
     private const MAX_COUPON_ATTEMPTS = 10;
 
+    /** Higher shared-address backstop so replacing the session cannot reset the budget forever. */
+    private const MAX_COUPON_ATTEMPTS_PER_IP = 100;
+
     private const COUPON_ATTEMPT_WINDOW = 600;
 
     public array $cart = [];
@@ -251,14 +254,20 @@ class MenuPage extends Component
         // counts as a guess: a real code that no longer qualifies belongs to a
         // customer who was given it.
         //
-        // Counted per browser session rather than per address, so a whole
-        // street behind one carrier NAT does not share one budget. The session
-        // id is hashed on the way into the key: it is a live credential and
-        // has no business sitting in a cache key.
+        // The tight budget is per browser session so a whole street behind one
+        // carrier NAT does not share it. A looser IP budget prevents replacing
+        // the session cookie from resetting the allowance forever. Both values
+        // are hashed before they become cache keys.
         $limiterKey = 'coupon-attempts:'.hash('sha256', session()->getId());
+        $ipLimiterKey = 'coupon-attempts-ip:'.hash('sha256', (string) request()->ip());
 
-        if (RateLimiter::tooManyAttempts($limiterKey, self::MAX_COUPON_ATTEMPTS)) {
-            $minutes = max(1, (int) ceil(RateLimiter::availableIn($limiterKey) / 60));
+        if (RateLimiter::tooManyAttempts($limiterKey, self::MAX_COUPON_ATTEMPTS)
+            || RateLimiter::tooManyAttempts($ipLimiterKey, self::MAX_COUPON_ATTEMPTS_PER_IP)) {
+            $waitSeconds = max(
+                RateLimiter::availableIn($limiterKey),
+                RateLimiter::availableIn($ipLimiterKey),
+            );
+            $minutes = max(1, (int) ceil($waitSeconds / 60));
 
             $this->couponError = 'Πολλές δοκιμές κωδικού. Δοκιμάστε ξανά σε '.$minutes.' λεπτά.';
 
@@ -269,6 +278,7 @@ class MenuPage extends Component
 
         if (! $coupon) {
             RateLimiter::hit($limiterKey, self::COUPON_ATTEMPT_WINDOW);
+            RateLimiter::hit($ipLimiterKey, self::COUPON_ATTEMPT_WINDOW);
 
             $this->couponError = 'Άγνωστος κωδικός κουπονιού.';
 

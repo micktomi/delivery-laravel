@@ -187,6 +187,27 @@ class CartCouponTest extends TestCase
             ->assertSet('couponError', 'Άγνωστος κωδικός κουπονιού.');
     }
 
+    public function test_replacing_sessions_cannot_bypass_the_shared_ip_backstop(): void
+    {
+        $this->realCoupon();
+
+        // Ten fresh sessions can each spend their deliberately small personal
+        // budget, but all one hundred guesses still count against this address.
+        for ($session = 0; $session < 10; $session++) {
+            $this->useSession(str_repeat((string) $session, 40));
+            $this->guess(Livewire::test(MenuPage::class), 10);
+        }
+
+        $this->useSession(str_repeat('z', 40));
+
+        $component = Livewire::test(MenuPage::class)
+            ->set('couponInput', 'REAL10')
+            ->call('applyCoupon');
+
+        $this->assertStringStartsWith('Πολλές δοκιμές κωδικού.', (string) $component->get('couponError'));
+        $this->assertNull($this->cart()->couponCode());
+    }
+
     public function test_the_rate_limit_key_does_not_carry_the_raw_session_id(): void
     {
         $product = $this->product('10.00');
@@ -199,6 +220,8 @@ class CartCouponTest extends TestCase
 
         $this->assertSame(1, RateLimiter::attempts('coupon-attempts:'.hash('sha256', self::SESSION_ONE)));
         $this->assertSame(0, RateLimiter::attempts('coupon-attempts:'.self::SESSION_ONE));
+        $this->assertSame(1, RateLimiter::attempts('coupon-attempts-ip:'.hash('sha256', '127.0.0.1')));
+        $this->assertSame(0, RateLimiter::attempts('coupon-attempts-ip:127.0.0.1'));
     }
 
     private function useSession(string $id): void

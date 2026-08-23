@@ -35,14 +35,6 @@ https://YOUR-DOMAIN/payments/viva/webhook
 
 Το return του browser δεν αποτελεί απόδειξη πληρωμής. Το webhook χρησιμοποιείται μόνο ως trigger: ο server ανακτά τη συναλλαγή από το OAuth-authenticated Viva Retrieve Transaction API και ελέγχει `orderCode`, status `F`, EUR currency code `978` και ακριβές server-calculated order total. Τα `viva_order_code` και `viva_transaction_id` είναι unique και η επεξεργασία duplicate webhook είναι idempotent. Pending Viva orders δεν περνούν σε kitchen/courier πριν επιβεβαιωθούν.
 
-Το ίδιο το `POST` webhook endpoint δέχεται προαιρετικά HTTP Basic credentials:
-
-- **Και τα δύο κενά** — το endpoint παραμένει ανοιχτό όπως πριν και η προστασία στηρίζεται μόνο στο IP allowlist του firewall/CDN.
-- **Και τα δύο ορισμένα** — πρέπει να δηλωθούν τα ίδια στο webhook μέσα από το Viva dashboard. Κάθε POST χωρίς ή με λάθος credentials απαντάται με `401` πριν γίνει οποιαδήποτε εξερχόμενη κλήση. Οι συγκρίσεις username και password είναι constant-time και εκτελούνται και οι δύο πριν βγει η ετυμηγορία.
-- **Μόνο το ένα ορισμένο** — θεωρείται ημιτελές deployment, όχι απόφαση. Το webhook αποτυγχάνει κλειστά με `500`, καταγράφει `viva.webhook_credentials_misconfigured` στο κανάλι `payments`, και δεν κάνει καμία κλήση προς τη Viva.
-
-Το δημόσιο `GET` verification handshake δεν επηρεάζεται από τα παραπάνω.
-
 ## Τι απομένει για πραγματικό sandbox test
 
 1. Δημιουργία demo Smart Checkout credentials και online payment source, με τα σωστά return URLs και source code.
