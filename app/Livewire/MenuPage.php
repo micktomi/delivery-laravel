@@ -52,7 +52,9 @@ class MenuPage extends Component
 
     public function mount(): void
     {
-        $this->cart = app(CartService::class)->items();
+        $cart = app(CartService::class);
+        $cart->removeUnavailableProducts();
+        $this->cart = $cart->items();
 
         $latestOrderRouteKey = session(self::LATEST_PUBLIC_ORDER_SESSION_KEY);
 

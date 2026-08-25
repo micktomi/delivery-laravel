@@ -4,6 +4,8 @@ use App\Http\Controllers\VivaWalletController;
 use App\Livewire\CheckoutPage;
 use App\Livewire\DriverDashboard;
 use App\Livewire\DriverLogin;
+use App\Livewire\KitchenAvailability;
+use App\Livewire\KitchenAvailabilityLogin;
 use App\Livewire\MenuPage;
 use App\Livewire\OrderBoard;
 use App\Livewire\OrderTrackingPage;
@@ -22,6 +24,11 @@ Route::post('/payments/viva/webhook', [VivaWalletController::class, 'webhook'])
     ->middleware('throttle:60,1')->name('viva.webhook');
 
 Route::get('/kitchen', OrderBoard::class)->name('kitchen')->middleware('auth');
+Route::get('/kitchen/availability/login', KitchenAvailabilityLogin::class)
+    ->name('kitchen.availability.login');
+Route::get('/kitchen/availability', KitchenAvailability::class)
+    ->name('kitchen.availability')
+    ->middleware('kitchen.availability');
 
 Route::get('/driver/login', DriverLogin::class)->name('driver.login');
 Route::middleware('auth:driver')->group(function (): void {

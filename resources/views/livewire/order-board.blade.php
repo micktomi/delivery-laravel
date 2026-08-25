@@ -95,18 +95,27 @@
         <span class="text-gray-400 text-xs sm:text-sm">{{ now()->format('d/m/Y · H:i') }}</span>
     </div>
 
-    {{-- ── Audio unlock button (D1) ── --}}
-    <button
-        x-on:click="unlockAudio()"
-        x-bind:class="audioReady
-            ? 'bg-green-700 text-green-100 cursor-default'
-            : 'bg-yellow-500 text-gray-900 hover:bg-yellow-400 animate-pulse'"
-        class="shrink-0 flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-bold text-xs sm:text-sm transition"
-        x-bind:disabled="audioReady"
-    >
-        <span x-show="!audioReady">🔇 Ενεργοποίηση ήχου</span>
-        <span x-show="audioReady" x-cloak>🔊 Ήχος ενεργός</span>
-    </button>
+    <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <a
+            href="{{ route('kitchen.availability') }}"
+            class="flex min-h-10 items-center rounded-lg border border-amber-400 bg-amber-500 px-3 text-xs font-black text-gray-950 transition hover:bg-amber-400 active:scale-95 sm:px-4 sm:text-sm"
+        >
+            Διαθεσιμότητα
+        </a>
+
+        {{-- ── Audio unlock button (D1) ── --}}
+        <button
+            x-on:click="unlockAudio()"
+            x-bind:class="audioReady
+                ? 'bg-green-700 text-green-100 cursor-default'
+                : 'bg-yellow-500 text-gray-900 hover:bg-yellow-400 animate-pulse'"
+            class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition sm:px-4 sm:text-sm"
+            x-bind:disabled="audioReady"
+        >
+            <span x-show="!audioReady">🔇 Ενεργοποίηση ήχου</span>
+            <span x-show="audioReady" x-cloak>🔊 Ήχος ενεργός</span>
+        </button>
+    </div>
 </header>
 
 {{-- ══ MOBILE STATUS TABS ══

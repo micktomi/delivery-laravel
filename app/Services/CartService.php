@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Coupon;
+use App\Models\Product;
 use Illuminate\Support\Facades\Session;
 
 class CartService
@@ -14,6 +15,43 @@ class CartService
     public function items(): array
     {
         return $this->state()['lines'];
+    }
+
+    /**
+     * Remove session lines that the customer menu can no longer order.
+     *
+     * The Product::available() scope is the same catalogue rule used by the
+     * menu query and add-to-cart lookup. Checkout still performs its full
+     * verification in case availability changes again after this refresh.
+     */
+    public function removeUnavailableProducts(): void
+    {
+        $lines = $this->items();
+
+        if ($lines === []) {
+            return;
+        }
+
+        $productIds = array_values(array_unique(array_map(
+            'intval',
+            array_column($lines, 'product_id'),
+        )));
+
+        $availableProductIds = Product::query()
+            ->available()
+            ->whereHas('category', fn ($query) => $query->where('is_active', true))
+            ->whereKey($productIds)
+            ->pluck('id')
+            ->mapWithKeys(fn (int $id): array => [$id => true]);
+
+        $availableLines = array_values(array_filter(
+            $lines,
+            fn (array $line): bool => isset($availableProductIds[(int) ($line['product_id'] ?? 0)]),
+        ));
+
+        if (count($availableLines) !== count($lines)) {
+            $this->replace($availableLines);
+        }
     }
 
     public function add(array $line): void
