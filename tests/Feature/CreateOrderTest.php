@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Actions\CreateOrder;
 use App\Enums\PaymentMethod;
 use App\Enums\SelectionType;
+use App\Livewire\OrderBoard;
 use App\Models\Category;
 use App\Models\OptionGroup;
 use App\Models\OptionValue;
@@ -13,6 +14,7 @@ use App\Models\Product;
 use App\Services\CartService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 class CreateOrderTest extends TestCase
@@ -128,14 +130,34 @@ class CreateOrderTest extends TestCase
         $item1 = $order->items->firstWhere('product_name', $line1['product_name']);
         $this->assertNotNull($item1);
         $this->assertEquals($line1['base_price'], $item1->base_price);
+        $this->assertEquals(3.50, $item1->unit_price);
         $this->assertEquals($line1['quantity'], $item1->quantity);
         $this->assertEquals($line1['line_total'], $item1->line_total);
         $this->assertSame('Διπλός', $item1->selected_options[0]['value']);
 
         $item2 = $order->items->firstWhere('product_name', $line2['product_name']);
         $this->assertNotNull($item2);
+        $this->assertEquals(3.00, $item2->unit_price);
         $this->assertEquals($line2['line_total'], $item2->line_total);
         $this->assertEquals([], $item2->selected_options);
+    }
+
+    public function test_order_item_snapshot_remains_on_the_kitchen_board_after_its_product_is_deleted(): void
+    {
+        $product = $this->product('Freddo που διαγράφηκε', '2.80');
+        $this->addCartLine($product);
+
+        $order = app(CreateOrder::class)->execute($this->checkoutData());
+        $product->delete();
+
+        $item = $order->fresh()->items()->sole();
+
+        $this->assertDatabaseMissing('products', ['id' => $product->id]);
+        $this->assertSame('Freddo που διαγράφηκε', $item->product_name);
+        $this->assertEquals(2.80, $item->unit_price);
+
+        Livewire::test(OrderBoard::class)
+            ->assertSee('1× Freddo που διαγράφηκε');
     }
 
     public function test_display_number_increments_for_same_day(): void

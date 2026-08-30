@@ -129,6 +129,19 @@ class CheckoutPageSubmitTest extends TestCase
         $this->assertDatabaseCount('orders', 0);
     }
 
+    public function test_checkout_shows_the_unavailable_product_notice_from_the_cart(): void
+    {
+        $this->seedCart();
+        session()->flash(
+            CartService::UNAVAILABLE_PRODUCT_NOTICE_SESSION_KEY,
+            'Το προϊόν Cappuccino δεν είναι πλέον διαθέσιμο και αφαιρέθηκε από την παραγγελία.',
+        );
+
+        Livewire::test(CheckoutPage::class)
+            ->assertSee('Το προϊόν Cappuccino δεν είναι πλέον διαθέσιμο και αφαιρέθηκε από την παραγγελία.')
+            ->assertSeeHtml('data-unavailable-product-notice');
+    }
+
     public function test_submit_rejects_invalid_payment_method(): void
     {
         $this->seedCart();

@@ -10,6 +10,8 @@ class CartService
 {
     private const KEY = 'cart';
 
+    public const UNAVAILABLE_PRODUCT_NOTICE_SESSION_KEY = 'cart_unavailable_product_notice';
+
     public const MAX_QUANTITY = 99;
 
     public function items(): array

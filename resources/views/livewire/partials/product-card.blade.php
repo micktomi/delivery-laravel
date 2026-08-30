@@ -21,7 +21,7 @@
     @else
         disabled
     @endif
-    class="group relative flex w-full items-center gap-3 overflow-visible border-b border-[var(--hairline)] py-3 text-left transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55 sm:flex-col sm:items-stretch sm:gap-0 sm:overflow-hidden sm:rounded-2xl sm:border sm:py-0 lg:rounded-[1.15rem] lg:transition-[border-color,box-shadow,transform] lg:duration-200 lg:hover:-translate-y-0.5 lg:hover:shadow-[0_16px_30px_-22px_rgb(28_18_6_/_0.45)]"
+    class="group relative flex w-full items-center gap-3 overflow-visible border-b border-[var(--hairline)] py-3 text-left transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55 disabled:grayscale sm:flex-col sm:items-stretch sm:gap-0 sm:overflow-hidden sm:rounded-2xl sm:border sm:py-0 lg:rounded-[1.15rem] lg:transition-[border-color,box-shadow,transform] lg:duration-200 lg:hover:-translate-y-0.5 lg:hover:shadow-[0_16px_30px_-22px_rgb(28_18_6_/_0.45)]"
 >
     @if($product->image_url)
         <img
@@ -60,7 +60,7 @@
             </span>
 
             @if(! $available)
-                <span class="text-[11px] font-semibold text-[var(--ink-soft)]">Εξαντλήθηκε</span>
+                <span class="text-[11px] font-semibold text-[var(--ink-soft)]">Μη διαθέσιμο</span>
             @elseif($hasOptions)
                 <span class="absolute bottom-1 right-0 grid size-7 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-white shadow-[0_3px_8px_rgb(180_83_9_/_0.35)] transition group-hover:bg-[var(--accent-hover)] sm:static sm:size-8 sm:rounded-lg sm:border sm:border-[var(--hairline)] sm:bg-transparent sm:text-[var(--ink-soft)] sm:shadow-none sm:group-hover:border-[var(--accent)] sm:group-hover:bg-transparent sm:group-hover:text-[var(--accent)] lg:size-9 lg:rounded-xl lg:group-hover:shadow-sm">
                     <svg class="size-4 sm:hidden" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M10 5v10M5 10h10"/></svg>

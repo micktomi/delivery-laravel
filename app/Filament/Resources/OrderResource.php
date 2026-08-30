@@ -180,8 +180,12 @@ class OrderResource extends Resource
                                 })
                                 ->implode(' · ');
                         }),
-                    Infolists\Components\TextEntry::make('line_total')->label('Τιμή')->money('EUR'),
-                ])->columns(3),
+                    Infolists\Components\TextEntry::make('unit_price')
+                        ->label('Τιμή μονάδας')
+                        ->money('EUR')
+                        ->placeholder('—'),
+                    Infolists\Components\TextEntry::make('line_total')->label('Σύνολο')->money('EUR'),
+                ])->columns(4),
             ]),
 
             // Snapshots, not a live read of the coupon: these are the figures

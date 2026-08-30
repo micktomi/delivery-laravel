@@ -37,6 +37,7 @@ class Order extends Model
             'discount_amount' => 'decimal:2',
             'placed_at' => 'datetime',
             'paid_at' => 'datetime',
+            'personal_data_anonymized_at' => 'datetime',
         ];
     }
 

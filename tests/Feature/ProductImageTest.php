@@ -85,7 +85,7 @@ class ProductImageTest extends TestCase
         $this->view('livewire.partials.product-card', compact('product', 'category'))
             ->assertSee('Με πάγο και βανίλια')
             ->assertSee('3,40 €')
-            ->assertSee('Εξαντλήθηκε')
+            ->assertSee('Μη διαθέσιμο')
             ->assertSeeHtml('clamp-2 text-[12px]');
     }
 

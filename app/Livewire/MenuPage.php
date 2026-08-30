@@ -33,6 +33,9 @@ class MenuPage extends Component
 
     public array $cart = [];
 
+    /** Customer-facing feedback after the existing availability refresh removes cart lines. */
+    public ?string $unavailableProductNotice = null;
+
     public ?string $latestTrackableOrderToken = null;
 
     // Modal state
@@ -53,8 +56,22 @@ class MenuPage extends Component
     public function mount(): void
     {
         $cart = app(CartService::class);
+        $storedUnavailableProductNotice = session(CartService::UNAVAILABLE_PRODUCT_NOTICE_SESSION_KEY);
+        $this->unavailableProductNotice = is_string($storedUnavailableProductNotice)
+            ? $storedUnavailableProductNotice
+            : null;
+        $cartBeforeAvailabilityRefresh = $cart->items();
         $cart->removeUnavailableProducts();
         $this->cart = $cart->items();
+        $newUnavailableProductNotice = $this->unavailableProductNotice(
+            $cartBeforeAvailabilityRefresh,
+            $this->cart,
+        );
+
+        if ($newUnavailableProductNotice !== null) {
+            $this->unavailableProductNotice = $newUnavailableProductNotice;
+            session()->flash(CartService::UNAVAILABLE_PRODUCT_NOTICE_SESSION_KEY, $newUnavailableProductNotice);
+        }
 
         $latestOrderRouteKey = session(self::LATEST_PUBLIC_ORDER_SESSION_KEY);
 
@@ -73,6 +90,46 @@ class MenuPage extends Component
         }
 
         $this->latestTrackableOrderToken = $latestOrder->getRouteKey();
+    }
+
+    /**
+     * The CartService remains responsible for the availability rule and the
+     * session update. This only turns the already-removed lines into one clear
+     * customer-facing message.
+     */
+    private function unavailableProductNotice(array $before, array $after): ?string
+    {
+        $remainingProductIds = array_fill_keys(
+            array_map(fn (array $line): int => (int) ($line['product_id'] ?? 0), $after),
+            true,
+        );
+
+        $removedNames = [];
+
+        foreach ($before as $line) {
+            if (isset($remainingProductIds[(int) ($line['product_id'] ?? 0)])) {
+                continue;
+            }
+
+            $name = trim((string) ($line['product_name'] ?? ''));
+
+            if ($name !== '' && ! in_array($name, $removedNames, true)) {
+                $removedNames[] = $name;
+            }
+        }
+
+        if ($removedNames === []) {
+            return null;
+        }
+
+        if (count($removedNames) === 1) {
+            return 'Το προϊόν '.$removedNames[0].' δεν είναι πλέον διαθέσιμο και αφαιρέθηκε από την παραγγελία.';
+        }
+
+        $lastName = array_pop($removedNames);
+
+        return 'Τα προϊόντα '.implode(', ', $removedNames).' και '.$lastName
+            .' δεν είναι πλέον διαθέσιμα και αφαιρέθηκαν από την παραγγελία.';
     }
 
     public function openProduct(int $id): void
@@ -334,7 +391,9 @@ class MenuPage extends Component
     public function render()
     {
         $categories = Category::with([
-            'products' => fn ($q) => $q->available()->orderBy('sort_order'),
+            // Keep unavailable products visible as disabled cards. The add-to-cart
+            // lookup below still applies the availability rule server-side.
+            'products' => fn ($q) => $q->orderBy('sort_order'),
         ])
             ->where('is_active', true)
             ->orderBy('sort_order')

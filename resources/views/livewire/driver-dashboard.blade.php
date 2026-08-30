@@ -129,8 +129,8 @@
                             <div class="flex items-start justify-between gap-4">
                                 <div class="min-w-0">
                                     <p class="font-display text-xl font-extrabold">#{{ str_pad($order->display_number, 3, '0', STR_PAD_LEFT) }}</p>
-                                    <p class="mt-1 font-semibold">{{ $order->customer_name }}</p>
-                                    <p class="mt-0.5 text-sm leading-relaxed text-[var(--ink-soft)]">{{ $order->address }}</p>
+                                    <p class="mt-1 font-semibold">Στοιχεία πελάτη μετά την ανάληψη</p>
+                                    <p class="mt-0.5 text-sm leading-relaxed text-[var(--ink-soft)]">Η διεύθυνση και το τηλέφωνο εμφανίζονται μόνο στον οδηγό που θα αναλάβει τη διανομή.</p>
                                 </div>
                                 <span class="price shrink-0 text-sm font-bold">{{ number_format($order->total, 2, ',', '.') }} €</span>
                             </div>

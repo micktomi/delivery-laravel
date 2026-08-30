@@ -47,9 +47,16 @@ class CheckoutPage extends Component
     /** Set when a coupon stopped qualifying at submit: the order still went through. */
     public ?string $droppedCouponCode = null;
 
+    /** The availability refresh happened in the cart; keep its feedback visible here. */
+    public ?string $unavailableProductNotice = null;
+
     public function mount(): void
     {
         $this->checkoutToken = (string) Str::uuid();
+        $storedUnavailableProductNotice = session(CartService::UNAVAILABLE_PRODUCT_NOTICE_SESSION_KEY);
+        $this->unavailableProductNotice = is_string($storedUnavailableProductNotice)
+            ? $storedUnavailableProductNotice
+            : null;
 
         if (app(CartService::class)->isEmpty()) {
             $this->redirect('/');

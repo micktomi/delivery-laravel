@@ -111,6 +111,11 @@ class CreateOrder
                         'product_id' => $line['product_id'],
                         'product_name' => $line['product_name'],
                         'base_price' => $line['base_price'],
+                        'unit_price' => $this->pricing->lineTotal(
+                            (float) $line['base_price'],
+                            array_column($line['selected_options'], 'price_delta'),
+                            1,
+                        ),
                         'quantity' => $line['quantity'],
                         'selected_options' => $line['selected_options'],
                         'line_total' => $line['line_total'],

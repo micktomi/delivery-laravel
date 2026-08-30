@@ -32,6 +32,15 @@
     x-on:scroll.window="onScroll()"
     class="min-h-screen bg-white overflow-x-clip"
 >
+@if($unavailableProductNotice)
+    <div class="mx-auto max-w-7xl px-4 pt-4 lg:px-8" data-unavailable-product-notice>
+        <p
+            class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950"
+            role="status"
+        >{{ $unavailableProductNotice }}</p>
+    </div>
+@endif
+
 @if(! $isAcceptingOrders)
     <section data-store-closed-banner class="border-b border-amber-300 bg-amber-50 px-4 py-3 text-center text-amber-950">
         <p class="font-display text-sm font-extrabold">

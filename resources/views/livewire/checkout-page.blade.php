@@ -48,26 +48,36 @@
 
 @else
 
+<div class="mx-auto w-full max-w-4xl px-4">
+
 {{-- ══ CHECKOUT / CART PROBLEMS ══ --}}
 @if($errors->has('checkout') || $errors->has('cart'))
-    <div class="px-4 pt-4">
+    <div class="pt-4">
         <div class="rounded-2xl border-2 border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
             {{ $errors->first('checkout') ?: $errors->first('cart') }}
         </div>
     </div>
 @endif
 @if(! $isAcceptingOrders && ! $errors->has('checkout'))
-    <div class="px-4 pt-4">
+    <div class="pt-4">
         <div class="rounded-2xl border-2 border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
             {{ $closedStoreMessage }}
         </div>
     </div>
 @endif
+@if($unavailableProductNotice)
+    <div class="pt-4" data-unavailable-product-notice>
+        <p
+            class="rounded-2xl border-2 border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900"
+            role="status"
+        >{{ $unavailableProductNotice }}</p>
+    </div>
+@endif
 
 
 {{-- ══ CART SUMMARY ══ --}}
-<div class="px-4 pt-5 pb-2">
-    <h2 class="font-bold text-gray-500 text-sm uppercase tracking-wider mb-3">Σύνοψη</h2>
+<div class="pt-4 pb-1">
+    <h2 class="font-bold text-gray-500 text-sm uppercase tracking-wider mb-2.5">Σύνοψη</h2>
     <div class="bg-white rounded-2xl shadow-sm divide-y divide-gray-100 overflow-hidden">
         @foreach($cart as $item)
             <div class="px-4 py-3">
@@ -94,10 +104,10 @@
 </div>
 
 {{-- ══ FORM ══ --}}
-<form wire:submit="submit" class="px-4 py-4 space-y-5 pb-36">
+<form wire:submit="submit" class="space-y-4 py-3 pb-32">
 
     {{-- Delivery details --}}
-    <div class="bg-white rounded-2xl shadow-sm p-5 space-y-4">
+    <div class="bg-white rounded-2xl shadow-sm p-4 space-y-3">
         <h2 class="font-black text-base text-gray-800">Στοιχεία παράδοσης</h2>
 
         {{-- Name --}}
@@ -179,8 +189,8 @@
     </div>
 
     {{-- Payment --}}
-    <div class="bg-white rounded-2xl shadow-sm p-5">
-        <h2 class="font-black text-base text-gray-800 mb-4">Τρόπος πληρωμής</h2>
+    <div class="bg-white rounded-2xl shadow-sm p-4">
+        <h2 class="font-black text-base text-gray-800 mb-3">Τρόπος πληρωμής</h2>
         <div class="grid grid-cols-2 gap-3">
             @foreach($paymentMethods as $method)
                 <label class="relative flex flex-col items-center justify-center p-4 rounded-2xl border-3 cursor-pointer transition
@@ -221,29 +231,33 @@
 </form>
 
 {{-- ══ STICKY SUBMIT ══ --}}
-<div class="fixed bottom-0 left-0 right-0 z-20 bg-white border-t px-4 pt-3 pb-4"
+<div class="fixed bottom-0 left-0 right-0 z-20 border-t bg-white px-4 pt-2 pb-3"
     style="padding-bottom: max(1rem, env(safe-area-inset-bottom));">
-    <button
-        type="button"
-        wire:click="submit"
-        @class([
-            'w-full py-4 text-white font-black text-xl rounded-2xl shadow-lg transition active:scale-95',
-            'opacity-60' => $checkoutDisabled,
-        ])
-        style="background: var(--accent);"
-        wire:loading.attr="disabled"
-        wire:loading.class="opacity-60"
-        @disabled($checkoutDisabled)
-    >
-        <span wire:loading.remove>{{ $isAcceptingOrders ? 'Υποβολή παραγγελίας' : 'Το κατάστημα είναι κλειστό' }}</span>
-        <span wire:loading class="flex items-center justify-center gap-2">
-            <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-            </svg>
-            Επεξεργασία...
-        </span>
-    </button>
+    <div class="mx-auto w-full max-w-4xl">
+        <button
+            type="button"
+            wire:click="submit"
+            @class([
+                'w-full py-3.5 text-white font-black text-xl rounded-2xl shadow-lg transition active:scale-95',
+                'opacity-60' => $checkoutDisabled,
+            ])
+            style="background: var(--accent);"
+            wire:loading.attr="disabled"
+            wire:loading.class="opacity-60"
+            @disabled($checkoutDisabled)
+        >
+            <span wire:loading.remove>{{ $isAcceptingOrders ? 'Υποβολή παραγγελίας' : 'Το κατάστημα είναι κλειστό' }}</span>
+            <span wire:loading class="flex items-center justify-center gap-2">
+                <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                Επεξεργασία...
+            </span>
+        </button>
+    </div>
+</div>
+
 </div>
 
 @endif

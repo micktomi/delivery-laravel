@@ -87,7 +87,8 @@ class TransitionOrderStatus
             } catch (Throwable $e) {
                 Log::error('order.confirmation_mail_failed', [
                     'order_id' => $result['order']->id,
-                    'message' => $e->getMessage(),
+                    // Mail transport messages can echo the recipient address.
+                    'exception' => $e::class,
                 ]);
             }
         }
