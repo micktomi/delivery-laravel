@@ -126,8 +126,55 @@ class VivaWalletService
         return $transaction;
     }
 
-    private function confirmTransaction(string $transactionId, array $transaction): string
+    /**
+     * Reconciles a pending payment order after a missed or failed webhook.
+     *
+     * Viva's OAuth Retrieve Transaction endpoint requires a transaction ID.
+     * The legacy Retrieve Order endpoint gives us that ID for a payment order,
+     * after which the exact same confirmation path as the webhook is used.
+     */
+    public function reconcilePendingOrder(Order $order): string
     {
+        if (! $this->isReconciliationCandidate($order)) {
+            return 'ignored';
+        }
+
+        $orderCode = (string) $order->viva_order_code;
+        $transactionId = $this->retrieveOrderTransactionId($orderCode, $order->getKey());
+
+        if ($transactionId === null) {
+            return 'pending';
+        }
+
+        $transaction = $this->retrieveTransaction($transactionId);
+        $retrievedOrderCode = (string) data_get($transaction, 'orderCode', '');
+
+        if (! hash_equals($orderCode, $retrievedOrderCode)) {
+            $this->logPaymentEvent('warning', 'viva.reconciliation_order_mismatch', [
+                'order_id' => $order->getKey(),
+                'transaction_id' => $transactionId,
+            ]);
+
+            return 'ignored';
+        }
+
+        // Unlike a webhook, reconciliation intentionally leaves terminal
+        // orders untouched. A late webhook still retains the existing refund
+        // / manual-review signal for a payment after cancellation.
+        return $this->confirmTransaction($transactionId, $transaction, skipTerminalOrders: true);
+    }
+
+    public function reconciliationIsConfigured(): bool
+    {
+        return trim((string) config('services.viva.reconciliation_merchant_id')) !== ''
+            && trim((string) config('services.viva.reconciliation_api_key')) !== '';
+    }
+
+    private function confirmTransaction(
+        string $transactionId,
+        array $transaction,
+        bool $skipTerminalOrders = false,
+    ): string {
         $orderCode = (string) data_get($transaction, 'orderCode', '');
         $status = (string) data_get($transaction, 'statusId', '');
         $currency = (string) data_get($transaction, 'currencyCode', '');
@@ -146,7 +193,7 @@ class VivaWalletService
             return 'ignored';
         }
 
-        return DB::transaction(function () use ($transactionId, $orderCode, $paidCents): string {
+        return DB::transaction(function () use ($transactionId, $orderCode, $paidCents, $skipTerminalOrders): string {
             $order = Order::query()
                 ->where('viva_order_code', $orderCode)
                 ->lockForUpdate()
@@ -154,6 +201,16 @@ class VivaWalletService
 
             if (! $order || $order->payment_method !== PaymentMethod::Viva) {
                 $this->logPaymentEvent('warning', 'viva.transaction_order_not_found', ['transaction_id' => $transactionId]);
+
+                return 'ignored';
+            }
+
+            if ($skipTerminalOrders && in_array($order->status, [OrderStatus::Completed, OrderStatus::Cancelled], true)) {
+                $this->logPaymentEvent('warning', 'viva.reconciliation_terminal_order_skipped', [
+                    'order_id' => $order->getKey(),
+                    'transaction_id' => $transactionId,
+                    'status' => $order->status->value,
+                ]);
 
                 return 'ignored';
             }
@@ -224,6 +281,68 @@ class VivaWalletService
         });
     }
 
+    private function isReconciliationCandidate(Order $order): bool
+    {
+        return $order->payment_method === PaymentMethod::Viva
+            && $order->payment_status === 'pending'
+            && filled($order->viva_order_code)
+            && ! in_array($order->status, [OrderStatus::Completed, OrderStatus::Cancelled], true);
+    }
+
+    private function retrieveOrderTransactionId(string $orderCode, int|string $localOrderId): ?string
+    {
+        if (! preg_match('/^\d{1,32}$/D', $orderCode)) {
+            $this->logPaymentEvent('warning', 'viva.reconciliation_invalid_order_code', [
+                'order_id' => $localOrderId,
+            ]);
+
+            return null;
+        }
+
+        $paymentOrder = $this->reconciliationApiClient()
+            ->get('/api/orders/'.$orderCode)
+            ->throw()
+            ->json();
+
+        if (! is_array($paymentOrder)) {
+            throw new RuntimeException('Viva returned an invalid payment order response.');
+        }
+
+        $returnedOrderCode = (string) data_get(
+            $paymentOrder,
+            'OrderCode',
+            data_get($paymentOrder, 'orderCode', ''),
+        );
+
+        if (! hash_equals($orderCode, $returnedOrderCode)) {
+            $this->logPaymentEvent('warning', 'viva.reconciliation_payment_order_mismatch', [
+                'order_id' => $localOrderId,
+            ]);
+
+            return null;
+        }
+
+        $transactionId = strtolower((string) data_get(
+            $paymentOrder,
+            'TransactionId',
+            data_get($paymentOrder, 'transactionId', ''),
+        ));
+
+        if ($transactionId === '') {
+            return null;
+        }
+
+        if (! Str::isUuid($transactionId)) {
+            $this->logPaymentEvent('warning', 'viva.reconciliation_invalid_transaction_id', [
+                'order_id' => $localOrderId,
+            ]);
+
+            return null;
+        }
+
+        return $transactionId;
+    }
+
     /**
      * Payment logging is best effort: an unavailable log destination must not
      * roll back or mask an otherwise valid payment state transition.
@@ -250,6 +369,17 @@ class VivaWalletService
             ->acceptJson()
             ->asJson()
             ->withToken($this->accessToken())
+            ->timeout(10);
+    }
+
+    private function reconciliationApiClient(): PendingRequest
+    {
+        return Http::baseUrl($this->checkoutBaseUrl())
+            ->acceptJson()
+            ->withBasicAuth(
+                $this->configuredValue('reconciliation_merchant_id'),
+                $this->configuredValue('reconciliation_api_key'),
+            )
             ->timeout(10);
     }
 
@@ -320,6 +450,13 @@ class VivaWalletService
         return $this->isDemo()
             ? 'https://demo-api.vivapayments.com'
             : 'https://api.vivapayments.com';
+    }
+
+    private function checkoutBaseUrl(): string
+    {
+        return $this->isDemo()
+            ? 'https://demo.vivapayments.com'
+            : 'https://www.vivapayments.com';
     }
 
     private function orderTotalInCents(Order $order): int
