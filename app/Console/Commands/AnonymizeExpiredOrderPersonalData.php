@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Enums\OrderStatus;
 use App\Models\Order;
+use App\Models\PrintJob;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -44,6 +45,17 @@ class AnonymizeExpiredOrderPersonalData extends Command
                         || $locked->placed_at->isAfter($cutoff)) {
                         return false;
                     }
+
+                    // Keep the job ID as a deduplication tombstone, remove its PII.
+                    PrintJob::where('order_id', $locked->id)->whereNotNull('payload')
+                        ->lockForUpdate()->get()->each(function (PrintJob $job): void {
+                            $job->payload = null;
+                            if ($job->status !== 'sent') {
+                                $job->status = 'failed';
+                                $job->last_error = 'payload_expired';
+                            }
+                            $job->save();
+                        });
 
                     $locked->items()->update(['notes' => null]);
                     $locked->forceFill([

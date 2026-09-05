@@ -61,6 +61,10 @@ class TransitionOrderStatus
 
             $fresh->update(['status' => $next->value]);
 
+            if ($expected === OrderStatus::Nea && $next === OrderStatus::Preparing) {
+                app(CreateKitchenPrintJob::class)->execute($fresh);
+            }
+
             Log::info('order.status_changed', [
                 'order_id' => $fresh->id,
                 'display_number' => $fresh->display_number,

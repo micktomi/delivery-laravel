@@ -1,0 +1,30 @@
+{
+  "attempt": 1,
+  "payload": {
+    "version": 1,
+    "type": "kitchen",
+    "print_job_id": "c44171d8-9fae-4d7c-8749-cec268e34b27",
+    "order_id": 123,
+    "display_number": 7,
+    "placed_at": "2026-09-05T09:30:00.000000Z",
+    "accepted_at": "2026-09-05T09:31:00.000000Z",
+    "timezone": "Europe/Athens",
+    "customer": {
+      "name": "Μαρία"
+    },
+    "notes": "Χωρίς καλαμάκι",
+    "items": [
+      {
+        "name": "Καφές",
+        "quantity": 2,
+        "options": [
+          {
+            "group": "Ζάχαρη",
+            "value": "Σκέτος"
+          }
+        ],
+        "notes": "Λίγος πάγος"
+      }
+    ]
+  }
+}

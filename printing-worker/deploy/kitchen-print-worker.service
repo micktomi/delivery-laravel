@@ -1,0 +1,30 @@
+[Unit]
+Description=Kitchen thermal printer pull worker
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=print-worker
+Group=print-worker
+SupplementaryGroups=lp
+StateDirectory=kitchen-print-worker
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/kitchen-print-worker
+EnvironmentFile=/etc/kitchen-print-worker.env
+ExecStart=/opt/kitchen-print-worker/kitchen-print-worker run
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=15
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
