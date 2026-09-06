@@ -191,15 +191,23 @@ class CartService
 
         // A cart stored before coupons existed is a bare list of lines.
         if (! array_key_exists('lines', $state)) {
-            return ['lines' => array_values($state), 'coupon_code' => null];
+            return ['lines' => $this->normalizeLines($state), 'coupon_code' => null];
         }
 
         $code = $state['coupon_code'] ?? null;
 
         return [
-            'lines' => array_values((array) ($state['lines'] ?? [])),
+            'lines' => $this->normalizeLines($state['lines'] ?? []),
             'coupon_code' => is_string($code) && $code !== '' ? $code : null,
         ];
+    }
+
+    private function normalizeLines(mixed $lines): array
+    {
+        return array_values(array_filter(
+            (array) $lines,
+            fn (mixed $line): bool => is_array($line),
+        ));
     }
 
     private function putLines(array $lines): void

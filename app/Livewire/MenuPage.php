@@ -409,6 +409,8 @@ class MenuPage extends Component
             : null;
 
         $cart = app(CartService::class);
+        // Session state is authoritative; never render the client-hydrated copy.
+        $this->cart = $cart->items();
         $totals = $cart->totals();
         $appliedCoupon = $cart->couponCode();
 
