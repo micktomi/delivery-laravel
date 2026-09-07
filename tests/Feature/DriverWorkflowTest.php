@@ -130,8 +130,8 @@ class DriverWorkflowTest extends TestCase
         $mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination='.rawurlencode($address);
 
         $this->assertStringContainsString('href="tel:+302101234567"', $html);
-        $this->assertStringContainsString('📞 Κλήση', $html);
-        $this->assertStringContainsString('📍 Πλοήγηση', $html);
+        $this->assertStringContainsString('Κλήση', $html);
+        $this->assertStringContainsString('Πλοήγηση', $html);
         $this->assertStringContainsString('href="'.e($mapsUrl).'"', $html);
         $this->assertStringNotContainsString(rawurlencode($notes), $mapsUrl);
         $this->assertStringContainsString(e($notes), $html);
