@@ -12,10 +12,9 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * The board is a four-column kanban built for a 1280px kitchen tablet. On a
- * phone those four columns used to stay side by side at ~90px each, which
- * clipped every card. Under md the board now shows one status at a time,
- * picked from a tab bar.
+ * The board shows one status at a time, picked from a tab bar, as a grid of
+ * large cards: one column on a phone, two on a tablet, three from 1024px.
+ * (It used to be a four-column kanban, which clipped every card on a phone.)
  *
  * These assertions guard the hooks the layout hangs off — the per-status
  * markers that app.css targets, and the breakpoint ladder — because the
@@ -58,36 +57,41 @@ class KitchenBoardResponsiveTest extends TestCase
         $html = $this->board()->html();
 
         $this->assertMatchesRegularExpression(
-            '/data-kitchen-tab="nea".*?\(2\)/s',
+            '/data-kitchen-tab="nea".*?data-kitchen-count[^>]*>\s*2\s*</s',
             $html,
             'The ΝΕΑ tab should show its two orders.'
         );
         $this->assertMatchesRegularExpression(
-            '/data-kitchen-tab="ready".*?\(1\)/s',
+            '/data-kitchen-tab="ready".*?data-kitchen-count[^>]*>\s*1\s*</s',
             $html,
             'The ΕΤΟΙΜΟ tab should show its one order.'
         );
     }
 
-    public function test_the_kanban_grid_narrows_at_each_breakpoint(): void
+    public function test_the_card_grid_narrows_at_each_breakpoint(): void
     {
+        Order::factory()->status(OrderStatus::Nea)->create();
+
         $html = $this->board()->html();
 
-        // 1 column on a phone, 2 on a tablet, the original 4 from 1280px up.
-        foreach (['grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-4'] as $class) {
+        // 1 column on a phone, 2 on a tablet, 3 from 1024px up.
+        foreach (['grid-cols-1', 'md:grid-cols-2', 'lg:grid-cols-3'] as $class) {
             $this->assertStringContainsString($class, $html);
         }
 
-        // Two rows on a tablet, or the wrapped columns would overflow the board.
-        foreach (['md:grid-rows-2', 'xl:grid-rows-1'] as $class) {
-            $this->assertStringContainsString($class, $html);
+        // The tab bar is legitimately a 4-up grid; the card grid must not be
+        // multi-column without a breakpoint prefix.
+        foreach (['grid-cols-2', 'grid-cols-3', 'grid-cols-4'] as $class) {
+            $this->assertDoesNotMatchRegularExpression(
+                '/class="[^"]*\bgap-[^"]*(?:class="|\s)'.preg_quote($class, '/').'(?:\s|")/s',
+                $html,
+                'On the card grid "'.$class.'" must stay behind a breakpoint prefix.'
+            );
         }
-
-        // The tab bar is legitimately a 4-up grid; the kanban must not be.
-        $this->assertDoesNotMatchRegularExpression(
-            '/grid gap-px[^"]*\sgrid-cols-4/s',
+        $this->assertMatchesRegularExpression(
+            '/<nav[^>]*class="[^"]*\bgrid-cols-4\b/s',
             $html,
-            'On the kanban itself grid-cols-4 must stay behind the xl: prefix.'
+            'The tab bar itself stays a 4-up grid.'
         );
     }
 
@@ -117,7 +121,7 @@ class KitchenBoardResponsiveTest extends TestCase
         }
 
         // …and the tablet-and-up board still gets all of them.
-        foreach (['md:h-dvh', 'md:overflow-hidden', 'md:flex-1', 'md:h-full', 'md:overflow-y-auto'] as $class) {
+        foreach (['md:h-dvh', 'md:overflow-hidden', 'md:flex-1', 'md:min-h-0', 'md:overflow-y-auto'] as $class) {
             $this->assertStringContainsString($class, $html);
         }
     }
@@ -165,7 +169,8 @@ class KitchenBoardResponsiveTest extends TestCase
     {
         $html = $this->board()->html();
 
-        $this->assertStringContainsString('h-20 md:h-32', $html);
+        $this->assertStringContainsString('Καμία παραγγελία', $html);
+        $this->assertStringContainsString('py-10 text-center md:py-16', $html);
     }
 
     /** Scenarios 1 + 3: one long ΝΕΑ order and one ΕΤΟΙΜΟ order, ΕΤΟΙΜΑΖΕΤΑΙ empty. */
@@ -296,10 +301,34 @@ class KitchenBoardResponsiveTest extends TestCase
 
         $board = $this->board();
 
+        $board->assertSee('Έναρξη');
         $board->assertSee('ΕΤΟΙΜΑΖΕΤΑΙ');
         $board->assertSee('Ακύρωση');
         $board->assertSeeHtml('data-kitchen-card');
-        $board->assertSeeHtml('min-h-11 min-w-0 flex-[2]');
-        $board->assertSeeHtml('min-h-11 flex-[1]');
+        // One large primary action per card, cancel kept as a low-emphasis
+        // secondary; both stay at a tablet-friendly 56px touch height.
+        $board->assertSeeHtml('min-h-14 min-w-0 grow basis-0');
+        $board->assertSeeHtml('min-h-14 shrink-0');
+    }
+
+    /**
+     * TransitionOrderStatus refuses ΕΤΟΙΜΟ → ΕΦΥΓΕ and ΕΦΥΓΕ → ΟΛΟΚΛΗΡΩΘΗΚΕ
+     * from the board (the driver app owns them), so those cards must not
+     * offer a button that can only ever fail.
+     */
+    public function test_driver_owned_stages_show_a_waiting_label_instead_of_an_advance_button(): void
+    {
+        $ready = Order::factory()->status(OrderStatus::Ready)->create();
+        $out = Order::factory()->status(OrderStatus::Out)->create();
+
+        $html = $this->board()->html();
+
+        $this->assertStringNotContainsString("advance({$ready->id}, 'ready')", $html);
+        $this->assertStringNotContainsString("advance({$out->id}, 'out')", $html);
+        $this->assertStringContainsString('Αναμονή για οδηγό', $html);
+        $this->assertStringContainsString('Σε διανομή', $html);
+        // Cancelling stays available on every stage.
+        $this->assertStringContainsString("cancel({$ready->id})", $html);
+        $this->assertStringContainsString("cancel({$out->id})", $html);
     }
 }
