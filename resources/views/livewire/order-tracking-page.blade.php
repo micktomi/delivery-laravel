@@ -1,181 +1,185 @@
-<div wire:poll.15s class="min-h-screen bg-gray-50">
+@php
+    /* Presentation only. OrderStatus labels are the kitchen's vocabulary;
+       the customer sees these instead. Anything not mapped falls back to the
+       enum label, so a new status can never render blank. */
+    $customerLabel = [
+        'nea' => 'Λάβαμε την παραγγελία',
+        'preparing' => 'Ετοιμάζεται',
+        'ready' => 'Έτοιμη',
+        'out' => 'Στον δρόμο',
+        'completed' => 'Παραδόθηκε',
+    ];
+    $labelFor = fn (\App\Enums\OrderStatus $status) => $customerLabel[$status->value] ?? $status->getLabel();
+    $stepHint = [
+        'nea' => 'Την είδαμε και θα ξεκινήσει σε λίγο.',
+        'preparing' => 'Η κουζίνα την ετοιμάζει αυτή τη στιγμή.',
+        'ready' => 'Περιμένει τον διανομέα για παραλαβή.',
+        'out' => 'Ο διανομέας είναι καθ’ οδόν προς εσένα.',
+        'completed' => 'Καλή απόλαυση!',
+    ];
+    $money = fn ($amount) => number_format((float) $amount, 2, ',', '.').' €';
+    $currentStatus = $currentIndex >= 0 ? $steps[$currentIndex] : null;
+@endphp
+
+<div wire:poll.15s class="min-h-dvh bg-stone-50">
 
 {{-- ══ HEADER ══ --}}
-<header class="sticky top-0 z-10 bg-white border-b px-4 py-3 flex items-center gap-3">
-    <a href="/" class="p-1 -ml-1 text-gray-500">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
-        </svg>
-    </a>
-    <div>
-        <h1 class="font-black text-lg leading-none">
-            Παραγγελία #{{ str_pad($order->display_number, 3, '0', STR_PAD_LEFT) }}
-        </h1>
-        <p class="text-xs text-gray-400 mt-0.5">{{ $order->placed_at->format('d/m/Y · H:i') }}</p>
+<header class="sticky top-0 z-10 border-b border-stone-200 bg-white">
+    <div class="mx-auto flex max-w-lg items-center gap-1 py-2 pl-2 pr-4 lg:max-w-5xl">
+        <a href="/" aria-label="Πίσω στο μενού" class="grid size-11 shrink-0 place-items-center rounded-xl text-stone-700 transition hover:bg-stone-100">
+            <svg class="size-6" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m15 19-7-7 7-7"/></svg>
+        </a>
+        <div class="min-w-0">
+            <h1 class="font-display text-lg font-extrabold leading-tight tracking-tight">
+                Παραγγελία #{{ str_pad($order->display_number, 3, '0', STR_PAD_LEFT) }}
+            </h1>
+            <p class="text-xs tabular-nums text-stone-500">{{ $order->placed_at->format('d/m/Y · H:i') }}</p>
+        </div>
     </div>
 </header>
 
-<div class="px-6 py-8 max-w-sm mx-auto">
+<div class="mx-auto w-full max-w-lg px-4 py-4 lg:grid lg:max-w-5xl lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-8 lg:py-6">
 
+{{-- ══ STATUS ══ --}}
+<div class="space-y-4">
     @if(session('viva_status'))
-        <div class="mb-6 rounded-2xl border-2 border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-800">
+        <div class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold leading-snug text-amber-950">
             {{ session('viva_status') }}
         </div>
     @endif
 
     @if(session('viva_error'))
-        <div class="mb-6 rounded-2xl border-2 border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700">
+        <div class="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold leading-snug text-red-800">
             {{ session('viva_error') }}
         </div>
     @endif
 
     @if($order->payment_method === \App\Enums\PaymentMethod::Viva && $order->payment_status !== 'paid' && !$isCancelled)
-        <div class="mb-6 rounded-2xl border-2 border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
-            <div class="font-bold">Αναμονή επιβεβαίωσης online πληρωμής.</div>
-            <div class="mt-1">Η κουζίνα θα λάβει την παραγγελία μόνο μετά την επιβεβαίωση της Viva.</div>
+        <div class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm leading-snug text-amber-950">
+            <p class="font-bold">Αναμονή επιβεβαίωσης online πληρωμής.</p>
+            <p class="mt-1">Η κουζίνα θα λάβει την παραγγελία μόνο μετά την επιβεβαίωση της Viva.</p>
             <a href="{{ route('viva.start', $order) }}"
-                class="mt-3 inline-block rounded-xl px-4 py-2 font-black text-white"
+                class="mt-3 flex min-h-11 w-full items-center justify-center rounded-xl px-4 text-sm font-bold text-white transition active:scale-[.98] sm:w-auto sm:px-5"
                 style="background: var(--accent);">
                 Συνέχεια στην πληρωμή
             </a>
         </div>
     @endif
 
-    {{-- ══ CUSTOMER ══ --}}
-    <div class="bg-white rounded-2xl shadow-sm px-5 py-4 mb-8">
-        <div class="font-bold text-base">{{ $order->customer_name }}</div>
-        <div class="text-sm text-gray-500 mt-0.5">{{ $order->address }}</div>
-        @if($order->floor_bell)
-            <div class="text-sm text-gray-400">{{ $order->floor_bell }}</div>
-        @endif
-    </div>
-    <div
-        data-order-payment-method="{{ $order->payment_method->value }}"
-        class="mb-8 rounded-2xl border-2 border-gray-200 bg-white px-5 py-4"
-    >
-        <div class="text-xs font-bold uppercase tracking-wider text-gray-400">Τρόπος πληρωμής</div>
-        <div class="mt-1 font-black text-gray-800">{{ $order->payment_method->trackingLabel($order->payment_status) }}</div>
-    </div>
-
-
     {{-- ══ CANCELLED ══ --}}
     @if($isCancelled)
-        <div class="mb-8 rounded-2xl border-2 border-red-200 bg-red-50 px-5 py-4 text-center">
-            <div class="text-2xl mb-1">🚫</div>
-            <div class="font-black text-base text-red-700">Η παραγγελία ακυρώθηκε</div>
-            <div class="text-sm text-red-500 mt-0.5">Επικοινωνήστε μαζί μας για οποιαδήποτε διευκρίνιση.</div>
+        <div class="rounded-2xl border border-red-300 bg-red-50 px-5 py-5 text-red-900">
+            <p class="font-display text-xl font-extrabold tracking-tight">Η παραγγελία ακυρώθηκε</p>
+            <p class="mt-1 text-sm leading-snug">Επικοινώνησε μαζί μας για οποιαδήποτε διευκρίνιση.</p>
         </div>
-    @endif
+    @else
+        {{-- Current state, said once and large --}}
+        <section class="rounded-2xl border border-stone-200 bg-white p-5">
+            <p class="text-sm font-semibold text-stone-500">Τρέχουσα κατάσταση</p>
+            <p class="mt-1 font-display text-2xl font-extrabold leading-tight tracking-tight">{{ $currentStatus ? $labelFor($currentStatus) : '' }}</p>
+            @if($currentStatus && isset($stepHint[$currentStatus->value]))
+                <p class="mt-1 text-base leading-snug text-stone-600">{{ $stepHint[$currentStatus->value] }}</p>
+            @endif
 
-    {{-- ══ PROGRESS STEPS ══ --}}
-    @php
-        $icons = ['📋', '☕', '✅', '🛵', '🏠'];
-    @endphp
-
-    <div class="relative">
-        @foreach($steps as $i => $step)
-            @php
-                $done    = $i < $currentIndex;
-                $current = $i === $currentIndex;
-                $pending = $i > $currentIndex;
-                $last    = $loop->last;
-            @endphp
-
-            <div class="flex gap-4">
-                {{-- Dot + line column --}}
-                <div class="flex flex-col items-center w-10 shrink-0">
-                    {{-- Circle --}}
-                    <div class="relative flex items-center justify-center w-10 h-10 rounded-full shrink-0
-                        @if($done)    bg-amber-500
-                        @elseif($current) bg-amber-500 ring-4 ring-amber-200
-                        @else         bg-white border-2 border-gray-200
-                        @endif"
-                    >
-                        @if($done)
-                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
-                            </svg>
-                        @elseif($current)
-                            <span class="text-white text-base">{{ $icons[$i] }}</span>
-                            {{-- pulse ring --}}
-                            <span class="absolute inset-0 rounded-full bg-amber-400 animate-ping opacity-30"></span>
-                        @else
-                            <span class="text-gray-300 text-base">{{ $icons[$i] }}</span>
-                        @endif
-                    </div>
-
-                    {{-- Connector line --}}
-                    @if(!$last)
-                        <div class="w-0.5 flex-1 my-1 min-h-[2rem]
-                            {{ $done ? 'bg-amber-400' : 'bg-gray-200' }}">
-                        </div>
-                    @endif
-                </div>
-
-                {{-- Label column --}}
-                <div class="pb-8 {{ $last ? 'pb-0' : '' }} flex items-start pt-2">
-                    <div>
-                        <div class="font-{{ $current ? 'black' : ($done ? 'semibold' : 'medium') }}
-                            text-{{ $current ? 'gray-900' : ($done ? 'gray-700' : 'gray-300') }}
-                            text-base leading-none">
-                            {{ $step->getLabel() }}
-                        </div>
-                        @if($current)
-                            <div class="text-xs mt-1 font-semibold" style="color: var(--accent)">
-                                Τρέχουσα κατάσταση
+            {{-- ══ PROGRESS STEPS ══ --}}
+            <ol class="mt-5 border-t border-stone-200 pt-4" aria-label="Πορεία παραγγελίας">
+                @foreach($steps as $i => $step)
+                    @php
+                        $done    = $i < $currentIndex;
+                        $current = $i === $currentIndex;
+                        $last    = $loop->last;
+                    @endphp
+                    <li class="flex gap-3">
+                        <div class="flex w-8 shrink-0 flex-col items-center">
+                            <div class="grid size-8 shrink-0 place-items-center rounded-full border-2
+                                @if($done) border-stone-900 bg-stone-900 text-white
+                                @elseif($current) border-[var(--accent)] bg-[var(--accent)] text-white
+                                @else border-stone-300 bg-white text-stone-300
+                                @endif"
+                            >
+                                @if($done)
+                                    <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>
+                                @elseif($current)
+                                    <span class="size-2.5 rounded-full bg-white"></span>
+                                @else
+                                    <span class="size-2 rounded-full bg-stone-300"></span>
+                                @endif
                             </div>
-                        @endif
-                    </div>
-                </div>
-            </div>
-        @endforeach
-    </div>
+                            @if(!$last)
+                                <div class="my-1 w-0.5 min-h-6 flex-1 rounded-full {{ $done ? 'bg-stone-900' : 'bg-stone-200' }}"></div>
+                            @endif
+                        </div>
+                        <div class="{{ $last ? 'pb-0' : 'pb-5' }} pt-1.5">
+                            <p class="text-sm font-bold leading-none {{ $current ? 'text-stone-950' : ($done ? 'text-stone-700' : 'text-stone-400') }}">
+                                {{ $labelFor($step) }}
+                            </p>
+                        </div>
+                    </li>
+                @endforeach
+            </ol>
+        </section>
+    @endif
+</div>
 
-    {{-- ══ ORDER SUMMARY ══ --}}
-    <div class="mt-8">
-        <h2 class="font-bold text-gray-500 text-sm uppercase tracking-wider mb-3 px-1">Σύνοψη Παραγγελίας</h2>
-        <div class="bg-white rounded-2xl shadow-sm divide-y divide-gray-100 overflow-hidden">
+{{-- ══ DETAILS ══ --}}
+<aside class="mt-4 space-y-4 lg:mt-0 lg:sticky lg:top-20">
+    <section class="rounded-2xl border border-stone-200 bg-white px-4 py-3.5">
+        <p class="text-base font-bold leading-tight">{{ $order->customer_name }}</p>
+        <p class="mt-1 text-sm leading-snug text-stone-600">{{ $order->address }}</p>
+        @if($order->floor_bell)
+            <p class="text-sm leading-snug text-stone-500">{{ $order->floor_bell }}</p>
+        @endif
+        <div
+            data-order-payment-method="{{ $order->payment_method->value }}"
+            class="mt-3 flex items-baseline justify-between gap-3 border-t border-stone-200 pt-3"
+        >
+            <span class="text-sm text-stone-500">Πληρωμή</span>
+            <span class="text-right text-sm font-semibold">{{ $order->payment_method->trackingLabel($order->payment_status) }}</span>
+        </div>
+    </section>
+
+    <section class="rounded-2xl border border-stone-200 bg-white">
+        <h2 class="border-b border-stone-200 px-4 py-3 font-display text-base font-extrabold tracking-tight">Σύνοψη παραγγελίας</h2>
+        <div class="px-4">
             @foreach($order->items as $item)
-                <div class="px-5 py-4">
-                    <div class="flex justify-between items-baseline font-semibold text-base">
-                        <span>{{ $item->quantity }}× {{ $item->product_name }}</span>
-                        <span style="color: var(--accent)">{{ number_format($item->line_total, 2) }}€</span>
+                <div class="border-b border-stone-100 py-3 last:border-0">
+                    <div class="flex items-baseline justify-between gap-3">
+                        <span class="min-w-0 text-sm font-semibold leading-snug">{{ $item->quantity }}× {{ $item->product_name }}</span>
+                        <span class="price shrink-0 text-sm font-bold">{{ $money($item->line_total) }}</span>
                     </div>
                     @if(!empty($item->selected_options))
-                        <div class="text-sm text-gray-400 mt-0.5 leading-snug">
+                        <div class="mt-0.5 text-[13px] leading-snug text-stone-500">
                             {{ \App\Services\OptionsPresenter::format($item->selected_options) }}
                         </div>
                     @endif
                     @if(!empty($item->notes))
-                        <div class="text-sm mt-0.5" style="color: var(--accent-text)">📝 {{ $item->notes }}</div>
+                        <div class="mt-0.5 text-[13px] leading-snug text-amber-800">{{ $item->notes }}</div>
                     @endif
                 </div>
             @endforeach
-            {{-- Three lines, never just the discounted total: the courier
-                 collects this amount and needs to see why it is lower. --}}
-            <div class="px-5 py-4 bg-gray-50 space-y-1">
-                <div class="flex justify-between items-baseline text-sm text-gray-500">
-                    <span class="font-semibold">Υποσύνολο</span>
-                    <span class="font-bold">{{ number_format($order->subtotal, 2) }}€</span>
+        </div>
+        {{-- Three lines, never just the discounted total: the courier
+             collects this amount and needs to see why it is lower. --}}
+        <div class="space-y-1 rounded-b-2xl border-t border-stone-200 bg-stone-50 px-4 py-3">
+            <div class="flex items-baseline justify-between text-sm">
+                <span class="text-stone-600">Υποσύνολο</span>
+                <span class="price font-semibold">{{ $money($order->subtotal) }}</span>
+            </div>
+            @if($order->hasDiscount())
+                <div class="flex items-baseline justify-between text-sm text-emerald-700">
+                    <span>Έκπτωση ({{ $order->coupon_code }})</span>
+                    <span class="price font-semibold">−{{ $money($order->discount_amount) }}</span>
                 </div>
-                @if($order->hasDiscount())
-                    <div class="flex justify-between items-baseline text-sm text-emerald-700">
-                        <span class="font-semibold">Έκπτωση ({{ $order->coupon_code }})</span>
-                        <span class="font-bold">−{{ number_format($order->discount_amount, 2) }}€</span>
-                    </div>
-                @endif
-                <div class="flex justify-between items-baseline pt-1">
-                    <span class="font-bold text-base text-gray-600">Σύνολο</span>
-                    <span class="font-black text-xl" style="color: var(--accent)">{{ number_format($order->total, 2) }}€</span>
-                </div>
+            @endif
+            <div class="flex items-baseline justify-between pt-1">
+                <span class="text-base font-bold">Σύνολο</span>
+                <span class="price font-display text-xl font-extrabold">{{ $money($order->total) }}</span>
             </div>
         </div>
-    </div>
+    </section>
 
-    {{-- ══ FOOTER NOTE ══ --}}
-    <p class="text-center text-xs text-gray-300 mt-10">
-        Αυτόματη ενημέρωση κάθε 15 δευτερόλεπτα
-    </p>
+    <p class="text-center text-xs text-stone-400">Ανανεώνεται αυτόματα κάθε 15 δευτερόλεπτα</p>
+</aside>
 
 </div>
 </div>

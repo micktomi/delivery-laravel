@@ -40,7 +40,9 @@ class OrderTrackingTest extends TestCase
         $order = Order::factory()->status(OrderStatus::Preparing)->create();
 
         $this->get(route('order.track', $order))
-            ->assertSee(OrderStatus::Preparing->getLabel());
+            // The tracking page speaks to the customer, not the kitchen: the enum
+            // label ΕΤΟΙΜΑΖΕΤΑΙ is shown as its customer-facing wording.
+            ->assertSee('Ετοιμάζεται');
     }
 
     public function test_tracking_page_requires_no_authentication(): void
