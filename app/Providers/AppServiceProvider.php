@@ -23,10 +23,14 @@ class AppServiceProvider extends ServiceProvider
             DB::select('SELECT 1');
         });
 
-        // The same persisted singleton feeds the public layout and its menu
-        // wordmark; no parallel configuration source is introduced.
-        View::composer(['layouts.app', 'livewire.menu-page'], function (\Illuminate\View\View $view): void {
-            $view->with('storeSettings', StoreSetting::current());
-        });
+        // The same persisted singleton feeds the public layout, the kitchen
+        // board and their store-identity wordmarks; no parallel configuration
+        // source is introduced.
+        View::composer(
+            ['layouts.app', 'livewire.menu-page', 'layouts.kitchen', 'livewire.order-board'],
+            function (\Illuminate\View\View $view): void {
+                $view->with('storeSettings', StoreSetting::current());
+            },
+        );
     }
 }

@@ -10,16 +10,20 @@
  * dropped connection on those routes fails exactly like it would with no
  * service worker installed, instead of resurrecting a stale order/cart.
  *
- * Bump CACHE_VERSION whenever a cached static asset (icon, favicon,
- * manifest) changes shape — Vite's own /build/ output is content-hashed
- * already, so it never needs a version bump to pick up new deploys.
+ * Bump CACHE_VERSION whenever a cached static asset (icon, favicon) changes
+ * shape — Vite's own /build/ output is content-hashed already, so it never
+ * needs a version bump to pick up new deploys.
+ *
+ * /manifest.webmanifest is deliberately NOT in the whitelist below: it is a
+ * runtime response built from StoreSetting, not a static asset, and caching
+ * it here would keep serving a store's old name/colors after an admin edit.
  */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `coffee-delivery-static-${CACHE_VERSION}`;
 
 const CACHEABLE_PREFIXES = ['/build/', '/icons/'];
-const CACHEABLE_EXACT = ['/favicon.ico', '/manifest.webmanifest'];
+const CACHEABLE_EXACT = ['/favicon.ico'];
 
 function isCacheable(url) {
     if (url.origin !== self.location.origin) {

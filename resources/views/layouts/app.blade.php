@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ $storeSettings->displayName() }}</title>
 
-    <link rel="manifest" href="{{ asset('manifest.webmanifest') }}">
+    <link rel="manifest" href="{{ route('manifest') }}">
     <meta name="theme-color" content="{{ $storeSettings->brandPrimary() }}">
     <link rel="apple-touch-icon" href="{{ asset('icons/apple-touch-icon.png') }}">
     <meta name="apple-mobile-web-app-capable" content="yes">

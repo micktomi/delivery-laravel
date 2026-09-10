@@ -2,7 +2,7 @@
     <x-filament::section>
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-                <h2 class="text-base font-semibold text-gray-950 dark:text-white">Delivery Menu</h2>
+                <h2 class="text-base font-semibold text-gray-950 dark:text-white">{{ $storeSettings->displayName() }}</h2>
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Διαχείριση καταλόγου και παραγγελιών</p>
             </div>
 

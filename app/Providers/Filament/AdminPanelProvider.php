@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Pages\Auth\StaffLogin;
+use App\Models\StoreSetting;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -28,8 +29,12 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login(StaffLogin::class)
-            ->colors([
-                'primary' => Color::Amber,
+            // Evaluated per request, like the public layout's brand CSS variables:
+            // the same panel serves every instance without a rebuild.
+            ->brandName(fn (): string => StoreSetting::current()->displayName())
+            ->brandLogo(fn (): ?string => StoreSetting::current()->logoUrl())
+            ->colors(fn (): array => [
+                'primary' => Color::hex(StoreSetting::current()->brandPrimary()),
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')

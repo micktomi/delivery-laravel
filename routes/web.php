@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ManifestController;
 use App\Http\Controllers\VivaWalletController;
 use App\Livewire\CheckoutPage;
 use App\Livewire\DriverDashboard;
@@ -12,6 +13,7 @@ use App\Livewire\OrderTrackingPage;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', MenuPage::class)->name('menu');
+Route::get('/manifest.webmanifest', [ManifestController::class, 'show'])->name('manifest');
 Route::get('/checkout', CheckoutPage::class)->name('checkout');
 Route::get('/order/{order}/track', OrderTrackingPage::class)->name('order.track');
 

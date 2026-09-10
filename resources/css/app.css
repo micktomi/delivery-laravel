@@ -5,7 +5,12 @@
 @source '../views/**/*.blade.php';
 
 /* Runtime layout CSS overrides the two brand tokens from StoreSetting. These
-   fallbacks preserve the canonical appearance when no settings row exists. */
+   fallbacks preserve the canonical appearance when no settings row exists.
+   --accent-hover/--accent-light/--accent-text stay fixed amber derivatives on
+   purpose: deriving contrast-safe shades from an arbitrary runtime hex would
+   turn this into a small color-system project, and a wrong guess there is a
+   worse outcome than a hover/highlight shade that doesn't chase the brand
+   color exactly. --accent and --espresso are the runtime-safe surfaces. */
 :root {
     --brand-primary: #d97706;
     --brand-accent:  #1c1206;

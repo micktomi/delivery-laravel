@@ -126,7 +126,7 @@
 <header class="shrink-0 bg-stone-900 text-white">
     <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-2.5 sm:px-5">
         <div class="flex min-w-0 items-baseline gap-x-3">
-            <span class="font-display text-lg font-extrabold tracking-tight sm:text-xl">{{ config('app.name') }}</span>
+            <span class="font-display text-lg font-extrabold tracking-tight sm:text-xl">{{ $storeSettings->displayName() }}</span>
             <span class="text-xs font-semibold uppercase tracking-[0.14em] text-stone-400">Κουζίνα</span>
             <span class="text-sm tabular-nums text-stone-400">{{ now()->format('H:i') }}</span>
         </div>

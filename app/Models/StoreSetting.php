@@ -97,6 +97,14 @@ final class StoreSetting extends Model
             : self::DEFAULT_STORE_NAME;
     }
 
+    /** Truncated for PWA home-screen labels, which have little room to render a full name. */
+    public function shortDisplayName(): string
+    {
+        $name = $this->displayName();
+
+        return mb_strlen($name) > 12 ? mb_substr($name, 0, 11).'…' : $name;
+    }
+
     public function logoUrl(): ?string
     {
         $path = (string) $this->logo_path;

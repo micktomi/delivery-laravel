@@ -127,7 +127,7 @@
     {{-- Category rail: brand, categories, nothing else. --}}
     <aside class="hidden xl:sticky xl:top-6 xl:block xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto">
         <div class="rounded-2xl border border-[var(--hairline)] bg-white">
-            <h1 class="hero-gradient flex items-center rounded-t-2xl px-4 py-4 font-display text-lg font-extrabold tracking-tight">{{ config('app.name') }}</h1>
+            <h1 class="hero-gradient flex items-center rounded-t-2xl px-4 py-4 font-display text-lg font-extrabold tracking-tight">{{ $storeSettings->displayName() }}</h1>
 
             <nav class="p-2" aria-label="Κατηγορίες μενού">
                 @foreach($categories as $category)
