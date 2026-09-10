@@ -32,7 +32,7 @@
     wire:poll.10s
     {{-- A phone scrolls the page; only from the tablet up is the board pinned
          to the viewport with the card area scrolling inside itself. --}}
-    class="min-h-dvh flex flex-col bg-stone-100 text-stone-950 select-none md:h-dvh md:overflow-hidden"
+    class="min-h-dvh flex w-full max-w-full flex-col overflow-x-clip bg-stone-100 text-stone-950 select-none md:h-dvh md:overflow-hidden"
     x-data="{
         alerting:    false,
         audioReady:  false,
@@ -131,10 +131,10 @@
             <span class="text-sm tabular-nums text-stone-400">{{ now()->format('H:i') }}</span>
         </div>
 
-        <div class="flex shrink-0 items-center gap-2">
+        <div class="flex w-full min-w-0 items-center gap-2 sm:w-auto">
             <a
                 href="{{ route('kitchen.availability') }}"
-                class="flex min-h-11 items-center rounded-xl border border-stone-600 px-4 text-sm font-bold text-stone-100 transition hover:bg-stone-800 active:scale-95"
+                class="flex min-h-11 min-w-0 grow basis-0 items-center justify-center rounded-xl border border-stone-600 px-3 text-xs font-bold sm:flex-none sm:px-4 sm:text-sm text-stone-100 transition hover:bg-stone-800 active:scale-95"
             >
                 Διαθεσιμότητα
             </a>
@@ -146,7 +146,7 @@
                 x-bind:class="audioReady
                     ? 'border-stone-600 text-stone-300 cursor-default'
                     : 'border-amber-500 bg-amber-500 text-stone-950 hover:bg-amber-400 animate-pulse'"
-                class="flex min-h-11 shrink-0 touch-manipulation items-center gap-2 rounded-xl border px-4 text-sm font-bold transition"
+                class="flex min-h-11 min-w-0 grow basis-0 touch-manipulation items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold transition sm:flex-none sm:px-4 sm:text-sm"
                 x-bind:disabled="audioReady"
             >
                 <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path x-show="audioReady" d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14"/><path x-show="!audioReady" d="m22 9-6 6M16 9l6 6"/></svg>
@@ -187,7 +187,7 @@
      Nothing here constrains height until md: on a phone every section is
      natural height so the page scrolls as one document. From the tablet up
      this area is the only thing that scrolls. --}}
-<main class="md:flex-1 md:min-h-0 md:overflow-y-auto">
+<main class="w-full min-w-0 md:flex-1 md:min-h-0 md:overflow-y-auto">
     @foreach($columns as $col)
         @php $status = $col['status']; $orders = $col['orders']; @endphp
         {{-- data-kitchen-column sits on the outermost wrapper so hiding it
@@ -195,16 +195,16 @@
         <div
             data-kitchen-column="{{ $status->value }}"
             wire:key="column-{{ $status->value }}"
-            class="flex-col min-w-0 px-3 pb-6 pt-3 sm:px-4 md:pb-8 md:pt-4"
+            class="w-full max-w-[1440px] min-w-0 flex-col px-3 pb-6 pt-3 sm:px-4 md:pb-8 md:pt-4"
         >
             <h2 class="sr-only">{{ $status->getLabel() }} ({{ $orders->count() }})</h2>
 
             @if($orders->isEmpty())
-                <div class="rounded-2xl border-2 border-dashed border-stone-300 py-10 text-center md:py-16">
+                <div class="w-full max-w-lg self-center rounded-2xl border-2 border-dashed border-stone-300 py-10 text-center md:py-16">
                     <p class="text-lg font-bold text-stone-400">Καμία παραγγελία</p>
                 </div>
             @else
-                <div class="grid grid-cols-1 items-start gap-3 md:grid-cols-2 md:gap-4 lg:grid-cols-3">
+                <div class="grid w-full min-w-0 grid-cols-1 items-start gap-3 md:grid-cols-2 md:gap-4 lg:grid-cols-3">
                     @foreach($orders as $order)
                         @php
                             $minutes = max(0, (int) $order->placed_at->diffInMinutes(now()));
@@ -221,7 +221,7 @@
                         <article
                             wire:key="order-{{ $order->id }}"
                             data-kitchen-card
-                            class="w-full min-w-0 bg-white flex flex-col rounded-2xl border border-stone-200 border-t-4 shadow-sm {{ $theme[$status->value]['bar'] }}"
+                            class="flex w-full min-w-0 max-w-full max-w-md flex-col bg-white rounded-2xl border border-stone-200 border-t-4 shadow-sm {{ $theme[$status->value]['bar'] }}"
                         >
                             {{-- Order number · elapsed time --}}
                             <div class="flex items-start justify-between gap-3 px-4 pt-3">

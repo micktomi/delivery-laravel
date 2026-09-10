@@ -106,6 +106,19 @@ class KitchenBoardResponsiveTest extends TestCase
      * So: nothing that reserves height may be unprefixed. Whatever a browser
      * with no working media queries applies has to be the phone layout.
      */
+    public function test_desktop_does_not_force_all_status_sections_visible(): void
+    {
+        $css = file_get_contents(resource_path('css/app.css'));
+
+        $this->assertStringContainsString("[data-kitchen-column] {
+    display: none;", $css);
+        $this->assertStringNotContainsString(
+            '@media (min-width: 48rem)',
+            $css,
+            'Desktop breakpoints must not reveal every status section at once.'
+        );
+    }
+
     public function test_no_unprefixed_class_pins_the_board_to_the_viewport(): void
     {
         Order::factory()->status(OrderStatus::Nea)->create();
@@ -231,7 +244,9 @@ class KitchenBoardResponsiveTest extends TestCase
             $html,
             'Each column needs min-w-0 to stay inside its grid track.'
         );
-        $this->assertStringContainsString('w-full min-w-0 bg-white', $html);
+        $this->assertStringContainsString('flex w-full min-w-0 max-w-full max-w-md flex-col bg-white', $html);
+        $this->assertStringContainsString('max-w-[1440px] min-w-0 flex-col', $html);
+        $this->assertStringContainsString('w-full max-w-lg self-center', $html);
     }
 
     /** Prep details stay readable while courier and financial data stay off the board. */
