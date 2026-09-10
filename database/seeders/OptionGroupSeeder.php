@@ -16,9 +16,18 @@ class OptionGroupSeeder extends Seeder
 
     public static array $groupMap = [];
 
-    public function run(): void
+    /**
+     * The canonical coffee-shop option groups, as plain seed data. Pulled
+     * out of run() so ApplyQuickSetupPreset's "Delivery Coffee" preset can
+     * reuse the exact same definition (categories/values/pricing) instead of
+     * typing a second copy of it, creating the rows through its own generic
+     * firstOrCreate loop rather than by invoking run() itself.
+     *
+     * @return list<array{name: string, selection: string, is_required: bool, values: list<array{name: string, price_delta: float, is_default: bool}>}>
+     */
+    public static function groups(): array
     {
-        $groups = [
+        return [
             [
                 'name' => 'Μέγεθος / Δόση',
                 'selection' => SelectionType::Single->value,
@@ -89,8 +98,11 @@ class OptionGroupSeeder extends Seeder
                 ],
             ],
         ];
+    }
 
-        foreach ($groups as $sort => $data) {
+    public function run(): void
+    {
+        foreach (self::groups() as $sort => $data) {
             $values = $data['values'];
             unset($data['values']);
             $data['sort_order'] = $sort;
@@ -104,7 +116,7 @@ class OptionGroupSeeder extends Seeder
             }
         }
 
-        $this->wireSweetenerDependency();
+        self::wireSweetenerDependency();
     }
 
     /**
@@ -113,11 +125,16 @@ class OptionGroupSeeder extends Seeder
      * leaving it for runtime code to infer from these names. Provisioning-time
      * only — nothing after this reads the catalogue's Greek labels to decide
      * behaviour.
+     *
+     * Public/static and looked up fresh by name (not via $groupMap) so
+     * ApplyQuickSetupPreset's "Delivery Coffee" preset can reuse this exact
+     * wiring after creating the same two groups through its own generic
+     * creation loop, without having to run() the whole seeder.
      */
-    private function wireSweetenerDependency(): void
+    public static function wireSweetenerDependency(): void
     {
-        $sweetnessGroupId = self::$groupMap['Ζάχαρη'] ?? null;
-        $sweetenerGroupId = self::$groupMap['Γλυκαντικό'] ?? null;
+        $sweetnessGroupId = OptionGroup::where('name', 'Ζάχαρη')->value('id');
+        $sweetenerGroupId = OptionGroup::where('name', 'Γλυκαντικό')->value('id');
 
         if ($sweetnessGroupId === null || $sweetenerGroupId === null) {
             return;

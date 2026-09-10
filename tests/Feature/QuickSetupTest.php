@@ -9,7 +9,9 @@ use App\Filament\Pages\QuickSetup;
 use App\Models\Category;
 use App\Models\OptionGroup;
 use App\Models\OptionValue;
+use App\Models\Product;
 use App\Models\User;
+use Database\Seeders\OptionGroupSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -162,6 +164,60 @@ class QuickSetupTest extends TestCase
         $this->assertSame([], $orektika->optionGroups()->pluck('name')->all());
     }
 
+    public function test_delivery_coffee_preset_creates_the_expected_categories_and_reuses_the_canonical_option_groups(): void
+    {
+        app(ApplyQuickSetupPreset::class)->execute(QuickSetupPreset::DeliveryCoffee);
+
+        $this->assertSame(
+            ['Καφέδες', 'Ροφήματα', 'Χυμοί', 'Γλυκά', 'Αλμυρά', 'Αναψυκτικά'],
+            Category::orderBy('sort_order')->pluck('name')->all(),
+        );
+
+        // Exactly the seven groups OptionGroupSeeder itself creates for a
+        // fresh install — this preset does not invent its own coffee data.
+        $this->assertSame(
+            collect(OptionGroupSeeder::groups())->pluck('name')->all(),
+            OptionGroup::orderBy('sort_order')->pluck('name')->all(),
+        );
+        $this->assertSame(20, OptionValue::count());
+    }
+
+    public function test_delivery_coffee_preset_wires_the_same_sweetener_dependency_as_a_fresh_install(): void
+    {
+        app(ApplyQuickSetupPreset::class)->execute(QuickSetupPreset::DeliveryCoffee);
+
+        $sweetness = OptionGroup::where('name', 'Ζάχαρη')->firstOrFail();
+        $sweetener = OptionGroup::where('name', 'Γλυκαντικό')->firstOrFail();
+        $plain = OptionValue::where('option_group_id', $sweetness->id)->where('name', 'Σκέτος')->firstOrFail();
+
+        $this->assertSame($plain->id, $sweetener->hidden_when_option_value_id);
+        $this->assertSame($sweetness->id, $sweetener->combine_display_with_option_group_id);
+    }
+
+    public function test_delivery_coffee_preset_attaches_only_the_drink_relevant_groups_to_kafedes(): void
+    {
+        app(ApplyQuickSetupPreset::class)->execute(QuickSetupPreset::DeliveryCoffee);
+
+        $coffee = Category::where('name', 'Καφέδες')->firstOrFail();
+        $drinks = Category::where('name', 'Ροφήματα')->firstOrFail();
+
+        $this->assertSame(
+            ['Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Γάλα', 'Extras καφέ'],
+            $coffee->optionGroups()->orderByPivot('sort_order')->pluck('name')->all(),
+        );
+        // Αφαιρέσεις/Extra υλικά exist as reusable groups but are not
+        // wired to any category yet — matching DemoMenuSeeder today.
+        $this->assertFalse($coffee->optionGroups()->where('option_groups.name', 'Αφαιρέσεις')->exists());
+        $this->assertSame([], $drinks->optionGroups()->pluck('name')->all());
+    }
+
+    public function test_delivery_coffee_preset_creates_no_products(): void
+    {
+        app(ApplyQuickSetupPreset::class)->execute(QuickSetupPreset::DeliveryCoffee);
+
+        $this->assertSame(0, Product::count());
+    }
+
     public function test_refuses_a_catalogue_that_already_has_categories(): void
     {
         Category::create(['name' => 'Υπάρχουσα', 'slug' => 'existing', 'sort_order' => 0, 'is_active' => true]);
@@ -243,6 +299,22 @@ class QuickSetupTest extends TestCase
 
         $this->assertSame(6, Category::count());
         $this->assertSame(3, OptionGroup::count());
+    }
+
+    public function test_admin_page_offers_exactly_the_three_presets_and_can_apply_delivery_coffee(): void
+    {
+        Livewire::actingAs($this->admin())
+            ->test(QuickSetup::class)
+            ->assertFormFieldExists('preset')
+            ->set('data.preset', QuickSetupPreset::DeliveryCoffee->value)
+            ->call('apply');
+
+        $this->assertSame(
+            ['delivery_coffee', 'grill_house', 'restaurant'],
+            array_map(fn (QuickSetupPreset $p) => $p->value, QuickSetupPreset::cases()),
+        );
+        $this->assertSame(6, Category::count());
+        $this->assertSame(7, OptionGroup::count());
     }
 
     public function test_admin_page_refuses_when_catalogue_is_not_empty(): void

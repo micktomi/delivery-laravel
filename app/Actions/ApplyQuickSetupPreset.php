@@ -6,6 +6,7 @@ use App\Enums\QuickSetupPreset;
 use App\Enums\SelectionType;
 use App\Models\Category;
 use App\Models\OptionGroup;
+use Database\Seeders\OptionGroupSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -103,6 +104,14 @@ class ApplyQuickSetupPreset
                 }
             }
 
+            // Delivery Coffee reuses the exact Ζάχαρη/Γλυκαντικό dependency
+            // wiring OptionGroupSeeder itself sets up for a fresh install —
+            // same helper, not a second copy of the "Σκέτος hides/absorbs
+            // Γλυκαντικό" logic.
+            if ($preset === QuickSetupPreset::DeliveryCoffee) {
+                OptionGroupSeeder::wireSweetenerDependency();
+            }
+
             return [
                 'categories' => $createdCategoryNames,
                 'option_groups' => $createdGroupNames,
@@ -118,8 +127,8 @@ class ApplyQuickSetupPreset
 
     /**
      * The preset definitions themselves. Deliberately plain arrays, not a
-     * generic "preset provider" abstraction — there are exactly two of
-     * these, and a third would still just be another array here.
+     * generic "preset provider" abstraction — there are exactly three of
+     * these, and a fourth would still just be another array here.
      *
      * @return array{
      *     categories: list<string>,
@@ -136,6 +145,27 @@ class ApplyQuickSetupPreset
     public static function definition(QuickSetupPreset $preset): array
     {
         return match ($preset) {
+            // The canonical coffee-shop option groups, reused from
+            // OptionGroupSeeder rather than typed out a second time here —
+            // only the category names and the template-category mapping are
+            // specific to this preset. Αφαιρέσεις/Extra υλικά are created
+            // like the other five but intentionally left unattached to any
+            // category, matching what DemoMenuSeeder itself does today.
+            QuickSetupPreset::DeliveryCoffee => [
+                'categories' => ['Καφέδες', 'Ροφήματα', 'Χυμοί', 'Γλυκά', 'Αλμυρά', 'Αναψυκτικά'],
+                'option_groups' => collect(OptionGroupSeeder::groups())
+                    ->map(fn (array $group): array => [
+                        'name' => $group['name'],
+                        'selection' => SelectionType::from($group['selection']),
+                        'is_required' => $group['is_required'],
+                        'max_select' => null,
+                        'template_categories' => in_array($group['name'], [
+                            'Μέγεθος / Δόση', 'Ζάχαρη', 'Γλυκαντικό', 'Γάλα', 'Extras καφέ',
+                        ], true) ? ['Καφέδες'] : [],
+                        'values' => $group['values'],
+                    ])
+                    ->all(),
+            ],
             QuickSetupPreset::GrillHouse => [
                 'categories' => ['Σουβλάκια', 'Μερίδες', 'Σαλάτες', 'Ορεκτικά', 'Αναψυκτικά'],
                 'option_groups' => [
