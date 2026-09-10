@@ -6,6 +6,7 @@ namespace Database\Seeders;
 
 use App\Enums\SelectionType;
 use App\Models\OptionGroup;
+use App\Models\OptionValue;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -102,5 +103,37 @@ class OptionGroupSeeder extends Seeder
                 $group->optionValues()->create($valueData);
             }
         }
+
+        $this->wireSweetenerDependency();
+    }
+
+    /**
+     * "Σκέτος" makes any Γλυκαντικό pick moot: wire that as structural group
+     * data (see the option_groups dependency-metadata migration) instead of
+     * leaving it for runtime code to infer from these names. Provisioning-time
+     * only — nothing after this reads the catalogue's Greek labels to decide
+     * behaviour.
+     */
+    private function wireSweetenerDependency(): void
+    {
+        $sweetnessGroupId = self::$groupMap['Ζάχαρη'] ?? null;
+        $sweetenerGroupId = self::$groupMap['Γλυκαντικό'] ?? null;
+
+        if ($sweetnessGroupId === null || $sweetenerGroupId === null) {
+            return;
+        }
+
+        $plainValueId = OptionValue::where('option_group_id', $sweetnessGroupId)
+            ->where('name', 'Σκέτος')
+            ->value('id');
+
+        if ($plainValueId === null) {
+            return;
+        }
+
+        OptionGroup::whereKey($sweetenerGroupId)->update([
+            'hidden_when_option_value_id' => $plainValueId,
+            'combine_display_with_option_group_id' => $sweetnessGroupId,
+        ]);
     }
 }

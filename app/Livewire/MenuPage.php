@@ -6,6 +6,7 @@ use App\Enums\OrderStatus;
 use App\Enums\SelectionType;
 use App\Models\Category;
 use App\Models\Coupon;
+use App\Models\OptionGroup;
 use App\Models\OptionValue;
 use App\Models\Order;
 use App\Models\Product;
@@ -183,10 +184,19 @@ class MenuPage extends Component
     {
         $product = $this->menuProduct((int) $this->openProductId, withOptions: true);
 
+        $selectedValueIds = $this->flattenSelectedValueIds($this->selectedOptions);
+
         $snapshotOptions = [];
         $deltas = [];
 
         foreach ($product->optionGroups as $group) {
+            // E.g. an optional add-on group that a "plain" pick elsewhere
+            // makes moot: skip it entirely, same as if nothing was ever
+            // shown for it — driven by hidden_when_option_value_id, not names.
+            if ($group->isHiddenGiven($selectedValueIds)) {
+                continue;
+            }
+
             $selected = $this->selectedOptions[$group->id] ?? null;
 
             if ($group->selection === SelectionType::Single) {
@@ -198,7 +208,7 @@ class MenuPage extends Component
                 if ($selected) {
                     $value = $group->optionValues->firstWhere('id', (int) $selected);
                     if ($value) {
-                        $snapshotOptions[] = $this->optionSnapshot($group->name, $value);
+                        $snapshotOptions[] = $this->optionSnapshot($group, $value);
                         $deltas[] = (float) $value->price_delta;
                     }
                 }
@@ -221,15 +231,15 @@ class MenuPage extends Component
                 foreach ($selectedIds as $valueId) {
                     $value = $group->optionValues->firstWhere('id', $valueId);
                     if ($value) {
-                        $snapshotOptions[] = $this->optionSnapshot($group->name, $value);
+                        $snapshotOptions[] = $this->optionSnapshot($group, $value);
                         $deltas[] = (float) $value->price_delta;
                     }
                 }
             }
         }
 
-        // A plain coffee (Ζάχαρη = Σκέτος) makes any Γλυκαντικό pick moot; drop
-        // it from the snapshot so the cart line and its price stay consistent.
+        // Defense in depth: even though hidden groups are already skipped
+        // above, canonicalize once more in case of a tampered/stale payload.
         $snapshotOptions = OptionsPresenter::canonicalize($snapshotOptions);
         $deltas = array_column($snapshotOptions, 'price_delta');
 
@@ -378,14 +388,40 @@ class MenuPage extends Component
             ->findOrFail($id);
     }
 
-    private function optionSnapshot(string $groupName, OptionValue $value): array
+    private function optionSnapshot(OptionGroup $group, OptionValue $value): array
     {
         return [
             'option_value_id' => $value->id,
-            'group' => $groupName,
+            'option_group_id' => $group->id,
+            'group' => $group->name,
             'value' => $value->name,
             'price_delta' => (float) $value->price_delta,
+            'is_default_value' => (bool) $value->is_default,
+            'hidden_when_option_value_id' => $group->hidden_when_option_value_id,
+            'combine_display_with_option_group_id' => $group->combine_display_with_option_group_id,
         ];
+    }
+
+    /**
+     * Every option value id currently picked anywhere on the product, single
+     * or multi-select alike — used to resolve which groups are hidden.
+     *
+     * @param  array<int, mixed>  $selectedOptions
+     * @return array<int, int>
+     */
+    private function flattenSelectedValueIds(array $selectedOptions): array
+    {
+        $ids = [];
+
+        foreach ($selectedOptions as $selected) {
+            foreach ((array) $selected as $id) {
+                if ($id !== null && $id !== '') {
+                    $ids[] = (int) $id;
+                }
+            }
+        }
+
+        return $ids;
     }
 
     public function render()

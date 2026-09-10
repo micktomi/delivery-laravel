@@ -329,42 +329,48 @@
             'is_required' => $g->is_required,
             'min_select'  => $g->min_select,
             'max_select'  => $g->max_select,
+            'hidden_when_option_value_id' => $g->hidden_when_option_value_id,
             'values'      => $g->optionValues->map(fn($v) => [
                 'id'          => $v->id,
                 'name'        => $v->name,
                 'price_delta' => (float) $v->price_delta,
+                'is_default'  => (bool) $v->is_default,
             ])->values()->all(),
         ])->values()->all()),
 
-        // Ζάχαρη (sweetness) / Γλυκαντικό (sweetener) is the one coffee-specific
-        // pair with a dependency: matched by name, since group/value ids are a
-        // database detail. Σκέτος (plain) makes any sweetener choice moot.
-        sweetnessGroupName: 'Ζάχαρη',
-        sweetenerGroupName: 'Γλυκαντικό',
-        plainValueName: 'Σκέτος',
-        defaultSweetenerValueName: 'Ζάχαρη',
-
-        get sweetenerGroup() {
-            return this.groups.find(g => g.name === this.sweetenerGroupName) || null;
+        // A group can be gated by a specific value chosen elsewhere on the
+        // same product (e.g. an optional add-on group that a "plain" choice
+        // makes moot) — driven entirely by each group's
+        // hidden_when_option_value_id, never by a group/option name.
+        isValueSelected(valueId) {
+            return Object.values(this.selectedOptions).some(v =>
+                Array.isArray(v) ? v.includes(valueId) : v == valueId
+            );
         },
-        get isPlain() {
-            const sweetnessGroup = this.groups.find(g => g.name === this.sweetnessGroupName);
-            if (!sweetnessGroup) return false;
-            const selected = sweetnessGroup.values.find(v => v.id == this.selectedOptions[sweetnessGroup.id]);
-            return selected ? selected.name === this.plainValueName : false;
+        isGroupHidden(group) {
+            return group.hidden_when_option_value_id !== null
+                && this.isValueSelected(group.hidden_when_option_value_id);
+        },
+        get hiddenGroupIds() {
+            return this.groups.filter(g => this.isGroupHidden(g)).map(g => g.id);
         },
         init() {
-            // Keeps selectedOptions consistent as the sweetness pick changes:
-            // going plain drops any sweetener choice so it can never reach the
-            // cart snapshot; leaving plain restores a safe default sweetener.
-            this.$watch('isPlain', (isPlain) => {
-                const group = this.sweetenerGroup;
-                if (!group) return;
-                if (isPlain) {
-                    delete this.selectedOptions[group.id];
-                } else if (!this.selectedOptions[group.id]) {
-                    const fallback = group.values.find(v => v.name === this.defaultSweetenerValueName) || group.values[0];
-                    if (fallback) this.selectedOptions[group.id] = fallback.id;
+            // Keeps selectedOptions consistent as gating picks change: a group
+            // that becomes hidden drops its selection so it can never reach
+            // the cart snapshot; a group that becomes visible again restores
+            // its default value if nothing is selected yet.
+            this.$watch('hiddenGroupIds', (hidden) => {
+                for (const g of this.groups) {
+                    if (hidden.includes(g.id)) {
+                        if (g.selection === 'single') {
+                            delete this.selectedOptions[g.id];
+                        } else {
+                            this.selectedOptions[g.id] = [];
+                        }
+                    } else if (g.selection === 'single' && !this.selectedOptions[g.id]) {
+                        const fallback = g.values.find(v => v.is_default) || g.values[0];
+                        if (fallback) this.selectedOptions[g.id] = fallback.id;
+                    }
                 }
             });
         },
@@ -372,6 +378,7 @@
         get totalDelta() {
             let d = 0;
             for (const g of this.groups) {
+                if (this.isGroupHidden(g)) continue;
                 if (g.selection === 'single') {
                     const val = g.values.find(v => v.id == this.selectedOptions[g.id]);
                     if (val) d += val.price_delta;
@@ -387,6 +394,7 @@
         get lineTotal() { return (this.basePrice + this.totalDelta) * this.quantity; },
         get canAdd() {
             for (const g of this.groups) {
+                if (this.isGroupHidden(g)) continue;
                 if (!g.is_required) continue;
                 if (g.selection === 'single' && !this.selectedOptions[g.id]) return false;
                 if (g.selection !== 'single' && (this.selectedOptions[g.id] || []).length < (g.min_select || 1)) return false;
@@ -440,10 +448,10 @@
             style="-webkit-overflow-scrolling: touch; touch-action: pan-y;"
         >
             @foreach($openProduct->optionGroups as $group)
-                {{-- Γλυκαντικό only makes sense once the coffee isn't plain;
-                     isPlain is the same name-driven check that also cleans
-                     selectedOptions when the sweetness pick changes. --}}
-                <div @if($group->name === 'Γλυκαντικό') x-show="!isPlain" @endif>
+                {{-- Hidden only when this group's own hidden_when_option_value_id
+                     names a value that's currently selected elsewhere; a no-op
+                     for the (majority) of groups that never opt into this. --}}
+                <div x-show="!hiddenGroupIds.includes({{ $group->id }})">
                     {{-- The limits are stated up front rather than left for the
                          validation error to explain after the fact. --}}
                     <div class="mb-2.5 flex items-baseline gap-2">

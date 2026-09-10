@@ -368,20 +368,34 @@ class CreateOrder
             $delta = (float) $value->price_delta;
             $options[] = [
                 'option_value_id' => $value->id,
+                'option_group_id' => $group->id,
                 'group' => $group->name,
                 'value' => $value->name,
                 'price_delta' => $delta,
+                'is_default_value' => (bool) $value->is_default,
+                'hidden_when_option_value_id' => $group->hidden_when_option_value_id,
+                'combine_display_with_option_group_id' => $group->combine_display_with_option_group_id,
             ];
             $deltas[] = $delta;
             $selectedByGroup[$group->id][] = $value->id;
         }
 
-        // A tampered/stale payload could submit "Σκέτος + Στέβια": canonicalize
-        // it down to just the plain coffee rather than trust the pair as-is.
+        // A tampered/stale payload could submit a gated group's pick alongside
+        // the value that gates it away (e.g. "plain + a sweetener"):
+        // canonicalize drops it rather than trusting the pair as-is.
         $options = OptionsPresenter::canonicalize($options);
         $deltas = array_column($options, 'price_delta');
 
+        $allSelectedValueIds = array_merge([], ...array_values($selectedByGroup));
+
         foreach ($groups as $group) {
+            // A gated group (e.g. an optional add-on a "plain" pick elsewhere
+            // makes moot) is never required regardless of what was submitted:
+            // canonicalize above already drops any stray selection for it.
+            if ($group->isHiddenGiven($allSelectedValueIds)) {
+                continue;
+            }
+
             $selectedCount = count(array_unique($selectedByGroup[$group->id] ?? []));
 
             if ($group->selection === SelectionType::Single) {

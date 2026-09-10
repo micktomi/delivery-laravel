@@ -36,12 +36,36 @@ class CoffeeSweetnessOptionTest extends TestCase
         return OptionValue::where('option_group_id', $group->id)->where('name', $name)->firstOrFail();
     }
 
-    // 1 & 2. Canonical presentation.
+    /**
+     * Builds a snapshot entry the way MenuPage/CreateOrder actually do: the
+     * dependency metadata lives on the entry itself, copied from the option
+     * group at capture time — format()/canonicalize() never look anything up.
+     */
+    private function entry(OptionGroup $group, OptionValue $value): array
+    {
+        return [
+            'option_value_id' => $value->id,
+            'option_group_id' => $group->id,
+            'group' => $group->name,
+            'value' => $value->name,
+            'price_delta' => (float) $value->price_delta,
+            'is_default_value' => (bool) $value->is_default,
+            'hidden_when_option_value_id' => $group->hidden_when_option_value_id,
+            'combine_display_with_option_group_id' => $group->combine_display_with_option_group_id,
+        ];
+    }
+
+    // 1 & 2. Canonical presentation, driven by the seeded groups' own metadata.
     public function test_format_collapses_default_sweetener_into_the_sweetness_label(): void
     {
+        $this->seed();
+
+        $sweetnessGroup = OptionGroup::where('name', 'Ζάχαρη')->firstOrFail();
+        $sweetenerGroup = OptionGroup::where('name', 'Γλυκαντικό')->firstOrFail();
+
         $options = [
-            ['group' => 'Ζάχαρη', 'value' => 'Μέτριος', 'price_delta' => 0.0],
-            ['group' => 'Γλυκαντικό', 'value' => 'Ζάχαρη', 'price_delta' => 0.0],
+            $this->entry($sweetnessGroup, $this->sweetnessValue('Μέτριος')),
+            $this->entry($sweetenerGroup, $this->sweetenerValue('Ζάχαρη')),
         ];
 
         $this->assertSame('Μέτριος', OptionsPresenter::format($options));
@@ -49,28 +73,38 @@ class CoffeeSweetnessOptionTest extends TestCase
 
     public function test_format_appends_a_non_default_sweetener_to_the_sweetness_label(): void
     {
+        $this->seed();
+
+        $sweetnessGroup = OptionGroup::where('name', 'Ζάχαρη')->firstOrFail();
+        $sweetenerGroup = OptionGroup::where('name', 'Γλυκαντικό')->firstOrFail();
+
         $options = [
-            ['group' => 'Ζάχαρη', 'value' => 'Μέτριος', 'price_delta' => 0.0],
-            ['group' => 'Γλυκαντικό', 'value' => 'Στέβια', 'price_delta' => 0.0],
+            $this->entry($sweetnessGroup, $this->sweetnessValue('Μέτριος')),
+            $this->entry($sweetenerGroup, $this->sweetenerValue('Στέβια')),
         ];
 
         $this->assertSame('Μέτριος με Στέβια', OptionsPresenter::format($options));
 
         $options = [
-            ['group' => 'Ζάχαρη', 'value' => 'Γλυκός', 'price_delta' => 0.0],
-            ['group' => 'Γλυκαντικό', 'value' => 'Ζαχαρίνη', 'price_delta' => 0.0],
+            $this->entry($sweetnessGroup, $this->sweetnessValue('Γλυκός')),
+            $this->entry($sweetenerGroup, $this->sweetenerValue('Ζαχαρίνη')),
         ];
 
         $this->assertSame('Γλυκός με Ζαχαρίνη', OptionsPresenter::format($options));
     }
 
-    // Brown sugar is just another non-default sweetener: the existing
-    // name-driven formatter needs no code change to handle it.
+    // Brown sugar is just another non-default sweetener: the generic,
+    // metadata-driven formatter needs no code change to handle it.
     public function test_format_appends_brown_sugar_to_the_sweetness_label(): void
     {
+        $this->seed();
+
+        $sweetnessGroup = OptionGroup::where('name', 'Ζάχαρη')->firstOrFail();
+        $sweetenerGroup = OptionGroup::where('name', 'Γλυκαντικό')->firstOrFail();
+
         $options = [
-            ['group' => 'Ζάχαρη', 'value' => 'Μέτριος', 'price_delta' => 0.0],
-            ['group' => 'Γλυκαντικό', 'value' => 'Καστανή ζάχαρη', 'price_delta' => 0.0],
+            $this->entry($sweetnessGroup, $this->sweetnessValue('Μέτριος')),
+            $this->entry($sweetenerGroup, $this->sweetenerValue('Καστανή ζάχαρη')),
         ];
 
         $this->assertSame('Μέτριος με Καστανή ζάχαρη', OptionsPresenter::format($options));
@@ -96,14 +130,21 @@ class CoffeeSweetnessOptionTest extends TestCase
     // 3. An inconsistent "Σκέτος + sweetener" combination never survives formatting.
     public function test_format_drops_any_sweetener_once_the_coffee_is_plain(): void
     {
+        $this->seed();
+
+        $sweetnessGroup = OptionGroup::where('name', 'Ζάχαρη')->firstOrFail();
+        $sweetenerGroup = OptionGroup::where('name', 'Γλυκαντικό')->firstOrFail();
+        $plain = $this->sweetnessValue('Σκέτος');
+        $stevia = $this->sweetenerValue('Στέβια');
+
         $options = [
-            ['group' => 'Ζάχαρη', 'value' => 'Σκέτος', 'price_delta' => 0.0],
-            ['group' => 'Γλυκαντικό', 'value' => 'Στέβια', 'price_delta' => 0.0],
+            $this->entry($sweetnessGroup, $plain),
+            $this->entry($sweetenerGroup, $stevia),
         ];
 
         $this->assertSame('Σκέτος', OptionsPresenter::format($options));
         $this->assertSame(
-            [['group' => 'Ζάχαρη', 'value' => 'Σκέτος', 'price_delta' => 0.0]],
+            [$this->entry($sweetnessGroup, $plain)],
             OptionsPresenter::canonicalize($options),
         );
     }
@@ -111,14 +152,52 @@ class CoffeeSweetnessOptionTest extends TestCase
     // 6. Unrelated options are untouched.
     public function test_format_keeps_unrelated_options_around_the_sweetness_pair(): void
     {
+        $this->seed();
+
+        $sizeGroup = OptionGroup::where('name', 'Μέγεθος / Δόση')->firstOrFail();
+        $sweetnessGroup = OptionGroup::where('name', 'Ζάχαρη')->firstOrFail();
+        $sweetenerGroup = OptionGroup::where('name', 'Γλυκαντικό')->firstOrFail();
+        $milkGroup = OptionGroup::where('name', 'Γάλα')->firstOrFail();
+
         $options = [
-            ['group' => 'Μέγεθος / Δόση', 'value' => 'Διπλός', 'price_delta' => 0.7],
-            ['group' => 'Ζάχαρη', 'value' => 'Μέτριος', 'price_delta' => 0.0],
-            ['group' => 'Γλυκαντικό', 'value' => 'Στέβια', 'price_delta' => 0.0],
-            ['group' => 'Γάλα', 'value' => 'Φρέσκο', 'price_delta' => 0.0],
+            $this->entry($sizeGroup, OptionValue::where('option_group_id', $sizeGroup->id)->where('name', 'Διπλός')->firstOrFail()),
+            $this->entry($sweetnessGroup, $this->sweetnessValue('Μέτριος')),
+            $this->entry($sweetenerGroup, $this->sweetenerValue('Στέβια')),
+            $this->entry($milkGroup, OptionValue::where('option_group_id', $milkGroup->id)->where('name', 'Φρέσκο')->firstOrFail()),
         ];
 
         $this->assertSame('Διπλός · Μέτριος με Στέβια · Φρέσκο', OptionsPresenter::format($options));
+    }
+
+    // 4. Renaming the groups/values does not change hide-or-combine behaviour:
+    // it is wired by id (hidden_when_option_value_id / combine_display_with_
+    // option_group_id), never by re-matching these Greek labels at runtime.
+    public function test_renaming_the_dependency_groups_does_not_change_behaviour(): void
+    {
+        $this->seed();
+
+        $sweetnessGroup = OptionGroup::where('name', 'Ζάχαρη')->firstOrFail();
+        $sweetenerGroup = OptionGroup::where('name', 'Γλυκαντικό')->firstOrFail();
+        $plain = $this->sweetnessValue('Σκέτος');
+        $medium = $this->sweetnessValue('Μέτριος');
+        $stevia = $this->sweetenerValue('Στέβια');
+
+        $sweetnessGroup->update(['name' => 'Sweetness Level']);
+        $sweetenerGroup->update(['name' => 'Sweetener Pick']);
+        $plain->update(['name' => 'None']);
+        $stevia->update(['name' => 'Stevia']);
+        $sweetnessGroup->refresh();
+        $sweetenerGroup->refresh();
+        $plain->refresh();
+        $stevia->refresh();
+        $medium->refresh();
+
+        $plainSelection = [$this->entry($sweetnessGroup, $plain), $this->entry($sweetenerGroup, $stevia)];
+        $this->assertSame('None', OptionsPresenter::format($plainSelection));
+        $this->assertCount(1, OptionsPresenter::canonicalize($plainSelection));
+
+        $nonPlainSelection = [$this->entry($sweetnessGroup, $medium), $this->entry($sweetenerGroup, $stevia)];
+        $this->assertSame('Μέτριος με Stevia', OptionsPresenter::format($nonPlainSelection));
     }
 
     // 3 (server side). A client that submits "Σκέτος + Στέβια" straight to addToCart
@@ -202,19 +281,27 @@ class CoffeeSweetnessOptionTest extends TestCase
         $this->assertFalse($options->contains('group', 'Γλυκαντικό'));
     }
 
-    // 4 & 5. The modal wires the sweetener group to hide on "Σκέτος" and
-    // restore with the safe "Ζάχαρη" default otherwise, driven by name — not id.
-    public function test_product_modal_wires_the_sweetener_group_to_the_plain_sweetness_state(): void
+    // 4 & 5. The modal hides the sweetener group once the sweetness pick's
+    // own hidden_when_option_value_id is selected — the group JSON payload
+    // carries that id; nothing in the markup matches on a group/option name.
+    public function test_product_modal_wires_the_sweetener_group_hide_by_id_not_name(): void
     {
         $this->seed();
 
         $product = Product::where('name', 'Freddo Espresso')->firstOrFail();
+        $sweetenerGroup = OptionGroup::where('name', 'Γλυκαντικό')->firstOrFail();
+        $plain = $this->sweetnessValue('Σκέτος');
+
+        $this->assertSame($plain->id, $sweetenerGroup->hidden_when_option_value_id);
 
         Livewire::test(MenuPage::class)
             ->call('openProduct', $product->id)
-            ->assertSeeHtml('x-show="!isPlain"')
-            ->assertSeeHtml("plainValueName: 'Σκέτος'")
-            ->assertSeeHtml("defaultSweetenerValueName: 'Ζάχαρη'");
+            // @js() HTML-escapes the closing quote as a " sequence
+            // rather than a literal ", hence matching on that form here.
+            ->assertSeeHtml('hidden_when_option_value_id\u0022:'.$plain->id)
+            ->assertSeeHtml('hiddenGroupIds.includes('.$sweetenerGroup->id.')')
+            ->assertDontSeeHtml('plainValueName')
+            ->assertDontSeeHtml('sweetenerGroupName');
     }
 
     // 7. Cart, checkout, tracking and kitchen board all render the same

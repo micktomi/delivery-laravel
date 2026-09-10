@@ -6,6 +6,7 @@ use App\Enums\SelectionType;
 use App\Filament\Resources\OptionGroupResource\Pages;
 use App\Filament\Resources\OptionGroupResource\RelationManagers;
 use App\Models\OptionGroup;
+use App\Models\OptionValue;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -56,6 +57,26 @@ class OptionGroupResource extends Resource
                 ->label('Σειρά')
                 ->numeric()
                 ->default(0),
+            Forms\Components\Select::make('hidden_when_option_value_id')
+                ->label('Κρυφή όταν έχει επιλεγεί')
+                ->helperText('Η ομάδα αγνοείται όταν αυτή η τιμή, από οποιαδήποτε άλλη ομάδα του ίδιου προϊόντος, είναι επιλεγμένη.')
+                ->options(fn (?OptionGroup $record) => OptionValue::query()
+                    ->with('optionGroup')
+                    ->when($record, fn ($query) => $query->where('option_group_id', '!=', $record->id))
+                    ->get()
+                    ->mapWithKeys(fn (OptionValue $value) => [
+                        $value->id => $value->optionGroup->name.': '.$value->name,
+                    ]))
+                ->searchable()
+                ->nullable(),
+            Forms\Components\Select::make('combine_display_with_option_group_id')
+                ->label('Εμφάνιση μαζί με ομάδα')
+                ->helperText('Η επιλογή εμφανίζεται σαν προσθήκη πάνω στην επιλογή της παραπάνω ομάδας αντί ξεχωριστά (π.χ. "Μέτριος με Στέβια").')
+                ->options(fn (?OptionGroup $record) => OptionGroup::query()
+                    ->when($record, fn ($query) => $query->whereKeyNot($record->id))
+                    ->pluck('name', 'id'))
+                ->searchable()
+                ->nullable(),
         ]);
     }
 
