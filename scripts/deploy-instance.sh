@@ -171,14 +171,12 @@ TMP_LINK="$INSTANCE_ROOT/.current.tmp.$$"
 ln -s "$RELEASE_DIR" "$TMP_LINK"
 mv -T "$TMP_LINK" "$CURRENT_LINK"
 
-if [[ -n "${FPM_RELOAD_CMD:-}" ]]; then
-    log "reloading PHP-FPM: $FPM_RELOAD_CMD"
-    if ! eval "$FPM_RELOAD_CMD"; then
-        log "WARNING: FPM_RELOAD_CMD failed; the new release is live regardless (OPcache will pick it up on next compile, may just hold stale bytecode in memory until FPM restarts)"
-    fi
-else
-    log "FPM_RELOAD_CMD not set — skipping FPM reload (harmless: each release has a distinct path, so OPcache serves the new files without one; only memory-growth hygiene is deferred)"
-fi
+# No automatic FPM reload: each release has a distinct absolute path, so
+# OPcache serves the new files correctly without one — this is purely about
+# not letting OPcache's memory grow across many deploys. Reload PHP-FPM
+# yourself after this script finishes if that matters on this host, e.g.:
+#   sudo systemctl reload php8.3-fpm
+log "PHP-FPM was not reloaded (not needed for correctness — see comment above). Reload it yourself if OPcache memory growth matters on this host."
 
 HEALTH_OK=0
 if [[ -n "$APP_URL" ]] && command -v curl >/dev/null 2>&1; then

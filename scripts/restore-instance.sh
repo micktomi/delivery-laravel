@@ -75,12 +75,13 @@ fi
 
 # Best-effort concurrency guard: SQLite has no session-kill primitive we can
 # reach from here, so this only detects an in-progress write at this exact
-# moment — it does not prevent one from starting immediately after. Stopping
-# PHP-FPM for this instance first is the operator's job; we just check and warn.
+# moment — it does not prove nothing starts writing again a moment later.
+# But if the lock is held right now, replacing the file out from under an
+# active writer is exactly the corruption/lost-write scenario this guard
+# exists to catch, so it must stop the restore, not just warn about it.
 log "checking whether the live database is busy right now"
-if ! sqlite3 -cmd ".timeout 2000" "$TARGET_DB" "BEGIN IMMEDIATE; ROLLBACK;" 2>/dev/null; then
-    log "WARNING: could not obtain an immediate write lock on $TARGET_DB within 2s — something is actively writing to it right now. Stop the application (e.g. PHP-FPM for this instance) before continuing, or expect the restore to race with live traffic."
-fi
+sqlite3 -cmd ".timeout 2000" "$TARGET_DB" "BEGIN IMMEDIATE; ROLLBACK;" 2>/dev/null \
+    || die "could not obtain an immediate write lock on $TARGET_DB within 2s — something is actively writing to it right now. Stop the application (e.g. PHP-FPM for this instance) and retry."
 
 BACKUP_DIR="$INSTANCE_ROOT/shared/backups"
 mkdir -p "$BACKUP_DIR"

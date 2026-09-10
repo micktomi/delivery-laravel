@@ -397,4 +397,41 @@ class DeploymentScriptsTest extends TestCase
         $this->assertNotSame(0, $code);
         $this->assertStringContainsString('integrity_check', $out);
     }
+
+    public function test_restore_aborts_instead_of_warning_when_the_database_is_actively_locked(): void
+    {
+        $dir = $this->tempDir('restore');
+        $root = $dir.'/instance';
+        $this->provision($root);
+        $dbPath = $root.'/shared/database/database.sqlite';
+        exec('sqlite3 '.escapeshellarg($dbPath)." \"CREATE TABLE t(v TEXT); INSERT INTO t VALUES('live');\"");
+
+        $backup = $dir.'/backup.sqlite';
+        exec('sqlite3 '.escapeshellarg($backup)." \"CREATE TABLE t(v TEXT); INSERT INTO t VALUES('from-backup');\"");
+
+        // Hold a write lock on the live database in the background for long
+        // enough for the restore script's own lock check to run into it —
+        // generous margin, since everything up to that check (arg parsing,
+        // several require_* calls, the backup's own integrity_check) has to
+        // run first and this shells out for every step.
+        $holderSql = $dir.'/holder.sql';
+        file_put_contents($holderSql, "BEGIN IMMEDIATE;\n.shell sleep 8\nROLLBACK;\n");
+        exec('sqlite3 '.escapeshellarg($dbPath).' < '.escapeshellarg($holderSql).' > /dev/null 2>&1 &');
+        usleep(300000); // let the background session actually take the lock
+
+        [$code, $out] = $this->runScript('restore-instance.sh', [
+            '--instance-root', $root, '--backup-file', $backup, '--yes',
+        ]);
+
+        $this->assertNotSame(0, $code);
+        $this->assertStringContainsString('write lock', $out);
+        $this->assertStringContainsString('Stop the application', $out);
+
+        // Nothing should have been touched: the live row is still there, and
+        // the backup was never copied over it.
+        exec('sqlite3 '.escapeshellarg($dbPath).' "SELECT v FROM t;"', $rows);
+        $this->assertSame(['live'], $rows);
+
+        sleep(8); // let the background holder finish before the temp dir is torn down
+    }
 }
