@@ -287,3 +287,97 @@ in-memory SQLite και array cache/session/queue στο `phpunit.xml`.
 ή να αγγίξει production data. Η γενίκευση των coffee option hardcodes και η
 release architecture είναι επόμενα, χωριστά patches με tests και migration
 compatibility review.
+
+## Task 4 — Immutable release + provision/deploy/restore tooling
+
+Εύρημα πριν την υλοποίηση: το σημερινό `DEPLOYMENT.md`/`.env.production.example`
+υποθέτουν MySQL/MariaDB για το ζωντανό instance (Leonidas), ενώ το
+`config/database.php` έχει ήδη πλήρως διαμορφωμένη σύνδεση `sqlite` με
+`journal_mode: WAL` και το fallback default του Laravel είναι `sqlite`. Το νέο
+tooling κτίζεται γύρω από SQLite ως το κανονικό instance DB, αλλά το βήμα
+backup στο `deploy-instance.sh` διαβάζει το πραγματικό `DB_CONNECTION` από το
+`.env` κάθε instance και διαλέγει μηχανισμό (`sqlite3 .backup` ή `mysqldump`),
+ώστε το ίδιο tooling να καλύπτει και το υπάρχον MySQL instance μέχρι το Task 5
+να το μεταφέρει. Άλλο εύρημα: το `routes/console.php` έχει δύο πραγματικά
+scheduled commands (`viva:reconcile-pending-payments`, `orders:anonymize-
+personal-data`) που δεν αναφέρονταν πουθενά ως λειτουργική απαίτηση deploy·
+το `provision-instance.sh` τυπώνει τη μία γραμμή cron που χρειάζεται.
+
+Λειτουργικό μοντέλο, χωρίς Docker/Kubernetes/Ansible/Forge/tenancy:
+
+```
+BUILD ONCE  (scripts/build-release.sh, εκτός production instance)
+  → git archive HEAD (μόνο tracked αρχεία — .env/vendor/node_modules ποτέ
+    δεν μπαίνουν στο artifact by construction, όχι με exclude-list)
+  → composer install --no-dev, npm ci && npm run build, μέσα στο export
+  → πλήρες test suite ως gate (ή ρητό --skip-tests)
+  → tar.gz + SHA256 + JSON metadata (git SHA, release id) κάτω από dist/
+
+MANUAL RELEASE GATE
+  → ο operator αποφασίζει πότε/σε ποιο instance πάει ένα artifact·
+    τίποτα δεν κάνει αυτόματο deploy σε push.
+
+DEPLOY ΤΑ ΙΔΙΑ BYTES (scripts/deploy-instance.sh, ένα instance τη φορά)
+  → επαλήθευση SHA256 αν δόθηκε checksum file
+  → extract σε νέο releases/<id>/, ποτέ overwrite υπαρχοντος release dir
+  → symlink storage/ και .env μέσα στο candidate από το instance-owned shared/
+  → backup της DB πριν από migrate (SQLite-safe .backup, όχι raw file copy)
+  → php artisan migrate --force, μετά config:cache/route:cache/view:cache
+  → pre-switch sanity check (php artisan about) πριν αγγίξει το current
+  → atomic switch: ln -s σε προσωρινό link + mv -T πάνω στο current
+  → health check στο /up (ή τοπικό artisan boot check αν λείπει APP_URL)
+  → αποτυχία health check: current γυρνάει αυτόματα στο προηγούμενο release,
+    η DB ΔΕΝ γυρνάει πίσω αυτόματα, exit μη-μηδενικό με ρητό recovery state
+
+CODE ROLLBACK = symlink
+  → το current είναι το μόνο group truth· επαναφορά σε προηγούμενο release
+    είναι η ίδια atomic mv λειτουργία, χωρίς git/composer/npm στο instance.
+
+DB RESTORE = ξεχωριστό, χειροκίνητο (scripts/restore-instance.sh)
+  → ποτέ δεν καλείται αυτόματα από failed deploy
+  → απαιτεί ρητό --backup-file και --yes, φτιάχνει safety copy πριν
+    αντικαταστήσει τίποτα, ελέγχει integrity πριν και μετά.
+```
+
+Ακριβείς εντολές operator:
+
+```bash
+# build (developer machine / build box, καθαρό git tree)
+scripts/build-release.sh
+
+# πρώτη φορά για ένα νέο instance
+scripts/provision-instance.sh --instance-root /var/www/delivery-instances/<name> \
+    --env-file /path/to/filled-in.env \
+    --artifact dist/delivery-<release-id>.tar.gz \
+    --checksum-file dist/delivery-<release-id>.tar.gz.sha256
+
+# επόμενα deploys σε υπάρχον instance
+scripts/deploy-instance.sh --instance-root /var/www/delivery-instances/<name> \
+    --artifact dist/delivery-<release-id>.tar.gz \
+    --checksum-file dist/delivery-<release-id>.tar.gz.sha256
+
+# το ίδιο artifact σε πολλά instances, σταματάει στο πρώτο failure
+scripts/deploy-all.sh --artifact dist/delivery-<release-id>.tar.gz \
+    --instances-file deploy/instances.txt
+
+# emergency DB restore — ξεχωριστή, ρητή ενέργεια
+scripts/restore-instance.sh --instance-root /var/www/delivery-instances/<name> \
+    --backup-file /path/to/backup.sqlite --yes
+```
+
+Instance layout κάτω από `--instance-root`:
+
+```
+<instance-root>/
+├── current -> releases/<active-id>/
+├── releases/<id>/           ανοσοποιημένο, ό,τι είχε το artifact + symlinked shared/
+└── shared/                  instance-owned, επιζεί από κάθε release
+    ├── .env
+    ├── database/database.sqlite   (μόνο όταν DB_CONNECTION=sqlite)
+    ├── storage/...
+    └── backups/              pre-deploy backups + pre-restore safety copies
+```
+
+Ο Rust `kitchen-print-worker` παραμένει εντελώς εκτός αυτού του κύκλου: δικό
+του systemd unit, δικό του μόνιμο SQLite state κάτω από `/var/lib/kitchen-
+print-worker/`, δεν αγγίζεται/επανεκκινείται από το Laravel deploy.
