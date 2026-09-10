@@ -7,9 +7,11 @@ use App\Filament\Resources\CategoryResource\RelationManagers;
 use App\Models\Category;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 class CategoryResource extends Resource
@@ -65,7 +67,25 @@ class CategoryResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    // A category with products can't be deleted at the database
+                    // level (products.category_id is restrict-on-delete, on
+                    // purpose — losing a product's category silently would be
+                    // worse than refusing). Without this guard the operator
+                    // would only find out from a raw query-exception page.
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->before(function (Tables\Actions\DeleteBulkAction $action, Collection $records) {
+                            $blocked = $records->filter(fn (Category $category) => $category->products()->exists());
+
+                            if ($blocked->isNotEmpty()) {
+                                Notification::make()
+                                    ->title('Δεν διαγράφηκε καμία κατηγορία')
+                                    ->body('Έχουν προϊόντα: '.$blocked->pluck('name')->implode(', ').'. Μετακινήστε ή διαγράψτε πρώτα τα προϊόντα τους.')
+                                    ->danger()
+                                    ->send();
+
+                                $action->halt();
+                            }
+                        }),
                 ]),
             ]);
     }

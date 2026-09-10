@@ -6,6 +6,7 @@ use App\Enums\SelectionType;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Validation\ValidationException;
 
 class OptionGroup extends Model
 {
@@ -22,6 +23,34 @@ class OptionGroup extends Model
             'hidden_when_option_value_id' => 'integer',
             'combine_display_with_option_group_id' => 'integer',
         ];
+    }
+
+    /**
+     * The admin form already excludes a group's own values/id from these two
+     * pickers, but that is a UI convenience, not a guarantee — a seeder,
+     * tinker session, or future code path could still write a nonsensical
+     * self-reference directly. Reject it here once, for every write path.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $group): void {
+            if ($group->combine_display_with_option_group_id !== null
+                && (int) $group->combine_display_with_option_group_id === (int) $group->id) {
+                throw ValidationException::withMessages([
+                    'combine_display_with_option_group_id' => 'Μια ομάδα δεν μπορεί να συνδυάζεται με τον εαυτό της.',
+                ]);
+            }
+
+            if ($group->hidden_when_option_value_id !== null) {
+                $gateGroupId = OptionValue::whereKey($group->hidden_when_option_value_id)->value('option_group_id');
+
+                if ($gateGroupId !== null && (int) $gateGroupId === (int) $group->id) {
+                    throw ValidationException::withMessages([
+                        'hidden_when_option_value_id' => 'Μια ομάδα δεν μπορεί να κρύβεται από δική της τιμή.',
+                    ]);
+                }
+            }
+        });
     }
 
     /**

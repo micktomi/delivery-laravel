@@ -129,6 +129,11 @@ class ProductResource extends Resource
                 Tables\Columns\ToggleColumn::make('is_available')->label('Διαθέσιμο'),
             ])
             ->defaultSort('sort_order')
+            // Reordering makes sense one category at a time — sort_order is
+            // only ever compared within a category (Category::products() is
+            // scoped), so drag a category's own products with the filter
+            // above narrowed to it.
+            ->reorderable('sort_order')
             ->filters([
                 Tables\Filters\SelectFilter::make('category_id')
                     ->label('Κατηγορία')
