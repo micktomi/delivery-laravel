@@ -8,6 +8,8 @@ use App\Models\StoreSetting;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -27,6 +29,10 @@ class StoreSettingsTest extends TestCase
         $this->assertFalse($first->accepting_orders);
         $this->assertSame([], $first->opening_hours);
         $this->assertNull($first->closed_message);
+        $this->assertSame(StoreSetting::DEFAULT_STORE_NAME, $first->displayName());
+        $this->assertSame(StoreSetting::DEFAULT_BRAND_PRIMARY, $first->brandPrimary());
+        $this->assertSame(StoreSetting::DEFAULT_BRAND_ACCENT, $first->brandAccent());
+        $this->assertNull($first->logoUrl());
         $this->assertDatabaseCount('store_settings', 1);
     }
 
@@ -95,7 +101,7 @@ class StoreSettingsTest extends TestCase
         $weekdaySections = $component
             ->instance()
             ->form
-            ->getComponents()[0]
+            ->getComponents()[1]
             ->getChildComponentContainer()
             ->getComponents();
 
@@ -157,5 +163,100 @@ class StoreSettingsTest extends TestCase
             'Κλειστά λόγω τεχνικού προβλήματος.',
             $settings->closed_message,
         );
+    }
+
+    public function test_settings_page_persists_valid_store_identity_and_branding(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        Livewire::actingAs($admin)
+            ->test(StoreSettings::class)
+            ->set('data.store_name', 'Το Κατάστημα')
+            ->set('data.brand_primary', '#2468aC')
+            ->set('data.brand_accent', '#123456')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $settings = StoreSetting::current()->fresh();
+
+        $this->assertSame('Το Κατάστημα', $settings->store_name);
+        $this->assertSame('#2468AC', $settings->brand_primary);
+        $this->assertSame('#123456', $settings->brand_accent);
+        $this->assertSame('Το Κατάστημα', $settings->displayName());
+    }
+
+    public function test_settings_page_rejects_a_non_hex_brand_color(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        Livewire::actingAs($admin)
+            ->test(StoreSettings::class)
+            ->set('data.brand_primary', 'orange')
+            ->call('save')
+            ->assertHasErrors(['data.brand_primary' => 'regex']);
+
+        $this->assertSame(StoreSetting::DEFAULT_BRAND_PRIMARY, StoreSetting::current()->brandPrimary());
+    }
+
+    public function test_settings_page_stores_a_valid_logo_without_losing_it_on_an_unchanged_save(): void
+    {
+        Storage::fake('public');
+        $admin = User::factory()->admin()->create();
+        $page = Livewire::actingAs($admin)->test(StoreSettings::class);
+
+        $page->set('data.logo_path', [UploadedFile::fake()->image('logo.png', 320, 320)])
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $settings = StoreSetting::current()->fresh();
+        $storedPath = $settings->logo_path;
+
+        $this->assertStringStartsWith('branding/', $storedPath);
+        $this->assertStringEndsWith('.png', $storedPath);
+        Storage::disk('public')->assertExists($storedPath);
+        $this->assertNotNull($settings->logoUrl());
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('src="'.$settings->logoUrl().'"', false)
+            ->assertSee('alt="'.$settings->displayName().'"', false);
+
+        $page->call('save')->assertHasNoErrors();
+
+        $this->assertSame($storedPath, StoreSetting::current()->fresh()->logo_path);
+        Storage::disk('public')->assertExists($storedPath);
+    }
+
+    public function test_public_layout_uses_stored_name_and_validated_brand_css_variables(): void
+    {
+        StoreSetting::current()->update([
+            'store_name' => 'Το Κατάστημα',
+            'brand_primary' => '#2468AC',
+            'brand_accent' => '#123456',
+        ]);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('<title>Το Κατάστημα</title>', false)
+            ->assertSee('content="#2468AC"', false)
+            ->assertSee('--brand-primary: #2468AC;', false)
+            ->assertSee('--brand-accent: #123456;', false)
+            ->assertSee('>Το Κατάστημα</h1>', false);
+    }
+
+    public function test_public_layout_falls_back_when_branding_values_are_invalid_outside_the_ui(): void
+    {
+        StoreSetting::current()->update([
+            'store_name' => str_repeat('x', StoreSetting::STORE_NAME_MAX_LENGTH + 1),
+            'brand_primary' => 'red; background: url(https://example.test)',
+            'brand_accent' => 'not-a-color',
+        ]);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('<title>Delivery Menu</title>', false)
+            ->assertSee('--brand-primary: #D97706;', false)
+            ->assertSee('--brand-accent: #1C1206;', false)
+            ->assertDontSee('background: url', false);
     }
 }

@@ -4,12 +4,14 @@ namespace App\Filament\Pages;
 
 use App\Models\StoreSetting;
 use Filament\Actions\Action;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
@@ -55,6 +57,38 @@ class StoreSettings extends Page implements HasForms
     {
         return $form
             ->schema([
+                Section::make('Ταυτότητα και εμφάνιση')
+                    ->description('Το όνομα, το λογότυπο και τα χρώματα εμφανίζονται στο δημόσιο storefront χωρίς νέο frontend build.')
+                    ->schema([
+                        TextInput::make('store_name')
+                            ->label('Όνομα καταστήματος')
+                            ->required()
+                            ->maxLength(StoreSetting::STORE_NAME_MAX_LENGTH),
+                        FileUpload::make('logo_path')
+                            ->label('Λογότυπο')
+                            ->helperText('Προαιρετικό · JPEG, PNG ή WebP έως 2 MB.')
+                            ->image()
+                            ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
+                            ->disk('public')
+                            ->directory('branding')
+                            ->visibility('public')
+                            ->maxSize(2048),
+                        TextInput::make('brand_primary')
+                            ->label('Βασικό χρώμα')
+                            ->required()
+                            ->maxLength(7)
+                            ->regex('/^#[0-9a-fA-F]{6}$/')
+                            ->helperText('Μορφή #RRGGBB, π.χ. #D97706.')
+                            ->dehydrateStateUsing(fn (string $state): string => strtoupper(trim($state))),
+                        TextInput::make('brand_accent')
+                            ->label('Δευτερεύον χρώμα')
+                            ->required()
+                            ->maxLength(7)
+                            ->regex('/^#[0-9a-fA-F]{6}$/')
+                            ->helperText('Μορφή #RRGGBB, π.χ. #1C1206.')
+                            ->dehydrateStateUsing(fn (string $state): string => strtoupper(trim($state))),
+                    ])
+                    ->columns(2),
                 Section::make('Εβδομαδιαίο ωράριο')
                     ->description('Τα διαστήματα εφαρμόζονται στη ζώνη ώρας Europe/Athens και μπορούν να περνούν τα μεσάνυχτα.')
                     ->schema($this->weekdaySections()),
@@ -136,6 +170,10 @@ class StoreSettings extends Page implements HasForms
         $closedMessage = trim((string) ($data['closed_message'] ?? ''));
         $settings = StoreSetting::current();
         $settings->update([
+            'store_name' => trim((string) $data['store_name']),
+            'logo_path' => $data['logo_path'] ?? $settings->logo_path,
+            'brand_primary' => strtoupper(trim((string) $data['brand_primary'])),
+            'brand_accent' => strtoupper(trim((string) $data['brand_accent'])),
             'opening_hours' => $openingHours,
             'closed_message' => $closedMessage === '' ? null : $closedMessage,
         ]);
@@ -216,6 +254,10 @@ class StoreSettings extends Page implements HasForms
     /**
      * @return array{
      *     schedule: array<string, array{open: bool, intervals: list<array{open: string, close: string}>}>,
+     *     store_name: string,
+     *     logo_path: ?string,
+     *     brand_primary: string,
+     *     brand_accent: string,
      *     closed_message: ?string
      * }
      */
@@ -245,6 +287,10 @@ class StoreSettings extends Page implements HasForms
         }
 
         return [
+            'store_name' => $settings->displayName(),
+            'logo_path' => $settings->logo_path,
+            'brand_primary' => $settings->brandPrimary(),
+            'brand_accent' => $settings->brandAccent(),
             'schedule' => $schedule,
             'closed_message' => $settings->closed_message,
         ];

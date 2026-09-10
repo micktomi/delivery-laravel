@@ -57,9 +57,14 @@
      Below xl this is the only brand element; the rail takes over from xl. --}}
 <section class="hero-gradient text-white xl:hidden">
     <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-5 lg:px-8">
-        <div class="min-w-0">
-            <h1 class="font-display text-lg font-extrabold tracking-tight">{{ config('app.name') }}</h1>
-            <p class="mt-2 text-[13px] font-medium text-white/75">Παραγγελία online · delivery και take away</p>
+        <div class="flex min-w-0 items-center gap-3">
+            @if($storeSettings->logoUrl())
+                <img src="{{ $storeSettings->logoUrl() }}" alt="{{ $storeSettings->displayName() }}" class="size-11 shrink-0 rounded-lg object-contain" />
+            @endif
+            <div class="min-w-0">
+                <h1 class="font-display text-lg font-extrabold tracking-tight">{{ $storeSettings->displayName() }}</h1>
+                <p class="mt-2 text-[13px] font-medium text-white/75">Παραγγελία online · delivery και take away</p>
+            </div>
         </div>
 
         @if($latestTrackableOrderToken)
@@ -86,7 +91,7 @@
                     x-cloak
                     x-show="scrolled"
                     class="font-display mr-1 hidden shrink-0 self-center text-sm font-extrabold tracking-tight lg:block"
-                >{{ config('app.name') }}</span>
+                >{{ $storeSettings->displayName() }}</span>
 
                 <nav class="scrollbar-hide -ml-4 flex min-w-0 flex-1 gap-1.5 overflow-x-auto py-1 pl-4 pr-6 lg:ml-0 lg:pl-0"
                      style="scroll-snap-type: x mandatory;">

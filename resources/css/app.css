@@ -4,13 +4,16 @@
 @source '../../storage/framework/views/*.php';
 @source '../views/**/*.blade.php';
 
-/* ── Accent color: change ONE line here when the café gives its brand color ── */
+/* Runtime layout CSS overrides the two brand tokens from StoreSetting. These
+   fallbacks preserve the canonical appearance when no settings row exists. */
 :root {
-    --accent:        #d97706; /* amber-600  — swap this */
+    --brand-primary: #d97706;
+    --brand-accent:  #1c1206;
+    --accent:        var(--brand-primary);
     --accent-hover:  #b45309; /* amber-700 */
     --accent-light:  #fef3c7; /* amber-100 */
     --accent-text:   #92400e; /* amber-800 */
-    --espresso:      #1c1206; /* hero gradient floor */
+    --espresso:      var(--brand-accent);
 
     /* Neutrals. Warm greys rather than blue-greys, so text and hairlines sit
        under the amber instead of arguing with it. */
