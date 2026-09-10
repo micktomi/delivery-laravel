@@ -441,8 +441,8 @@ class OrderCouponTest extends TestCase
             ->assertDontSee('Υποσύνολο')
             ->assertDontSee('Έκπτωση (WELCOME15)')
             ->assertDontSee('Προς είσπραξη')
-            ->assertDontSee('12.40€')
-            ->assertDontSee('10.54€');
+            ->assertDontSee('12,40 €')
+            ->assertDontSee('10,54 €');
     }
 
     public function test_the_tracking_page_shows_subtotal_discount_and_total(): void
@@ -457,10 +457,10 @@ class OrderCouponTest extends TestCase
         $this->get(route('order.track', $order->getRouteKey()))
             ->assertOk()
             ->assertSee('Υποσύνολο')
-            ->assertSee('12.40€')
+            ->assertSee('12,40 €')
             ->assertSee('Έκπτωση (WELCOME15)')
-            ->assertSee('1.86€', escape: false)
-            ->assertSee('10.54€');
+            ->assertSee('1,86 €')
+            ->assertSee('10,54 €');
     }
 
     /**

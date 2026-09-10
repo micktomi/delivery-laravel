@@ -101,7 +101,7 @@ class ProductCustomizationTest extends TestCase
         $this->get(route('order.track', $order))
             ->assertOk()
             ->assertSee('Διπλός')
-            ->assertSee('2.90€');
+            ->assertSee('2,90 €');
 
         // 5. Confirm kitchen board shows the size option
         $user = User::factory()->create();

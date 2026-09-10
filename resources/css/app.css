@@ -16,9 +16,9 @@
        under the amber instead of arguing with it. */
     --ink:           #1c1917;
     --ink-soft:      #57534e;
-    --muted:         #a8a29e;
+    --muted:         #78716c;
     --hairline:      #e7e5e4;
-    --sunken:        #fafaf9;
+    --sunken:        #f5f5f4;
 }
 
 [x-cloak] { display: none !important; }

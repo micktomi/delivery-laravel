@@ -66,10 +66,11 @@ class ProductImageTest extends TestCase
         $html = view('livewire.partials.product-card', compact('product', 'category'))->render();
 
         $this->assertStringContainsString('data-product-media', $html);
-        $this->assertStringContainsString('size-[68px] shrink-0 overflow-hidden', $html);
+        $this->assertStringContainsString('size-18 shrink-0 overflow-hidden', $html);
         $this->assertStringContainsString('alt=""', $html);
         $this->assertStringContainsString('onerror="this.hidden = true"', $html);
-        $this->assertStringContainsString('right-1.5', $html);
+        // The add control is a 44px target beside the price, never over the photo.
+        $this->assertStringContainsString('grid size-11 shrink-0 place-items-center', $html);
         $this->assertStringContainsString('min-w-0 max-w-full', $html);
     }
 
@@ -101,7 +102,7 @@ class ProductImageTest extends TestCase
             ->assertSee('Με πάγο και βανίλια')
             ->assertSee('3,40 €')
             ->assertSee('Μη διαθέσιμο')
-            ->assertSeeHtml('clamp-2 text-[12px]');
+            ->assertSeeHtml('clamp-2 text-[13px]');
     }
 
     public function test_products_with_options_keep_the_modal_action_and_direct_products_keep_the_add_action(): void

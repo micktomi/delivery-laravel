@@ -21,12 +21,12 @@
 @if($canApply || $appliedCoupon)
 <div class="mb-3">
     @if($appliedCoupon && $hasDiscount)
-        <div class="flex items-center justify-between rounded-lg bg-[var(--accent-light)] px-3 py-2">
-            <span class="price text-[12.5px] font-semibold text-[var(--accent-text)]">Κουπόνι {{ $appliedCoupon }}</span>
+        <div class="flex min-h-11 items-center justify-between rounded-lg bg-emerald-50 px-3 py-1.5 text-emerald-800">
+            <span class="price text-[13px] font-semibold">Κουπόνι {{ $appliedCoupon }}</span>
             <button
                 type="button"
                 wire:click="removeCoupon"
-                class="text-[12px] font-medium text-[var(--ink-soft)] underline underline-offset-2"
+                class="min-h-9 px-1 text-[13px] font-medium underline underline-offset-2"
             >Αφαίρεση</button>
         </div>
     @elseif($canApply)
@@ -40,48 +40,48 @@
                 placeholder="Κωδικός κουπονιού"
                 autocomplete="off"
                 autocapitalize="characters"
-                class="min-w-0 flex-1 rounded-lg border border-[var(--hairline)] bg-white px-3 py-2 text-[13px] uppercase placeholder:normal-case placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
+                class="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--hairline)] bg-white px-3 text-sm uppercase placeholder:normal-case placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
             >
             <button
                 type="button"
                 wire:click="applyCoupon"
-                class="shrink-0 rounded-lg border border-[var(--hairline)] px-3 py-2 text-[13px] font-semibold text-[var(--ink-soft)] transition active:scale-95"
+                class="min-h-11 shrink-0 rounded-lg border border-[var(--hairline)] bg-white px-3 text-sm font-semibold text-[var(--ink)] transition hover:border-[var(--muted)] active:scale-95"
             >Εφαρμογή</button>
         </div>
     @endif
 
     @if($couponError)
-        <p class="mt-1.5 text-[12px] font-medium text-red-600">{{ $couponError }}</p>
+        <p class="mt-1.5 text-[13px] font-medium text-red-700">{{ $couponError }}</p>
     @elseif($couponNotice)
-        <p class="mt-1.5 text-[12px] font-medium text-amber-700">{{ $appliedCoupon }}: {{ $couponNotice }}</p>
+        <p class="mt-1.5 text-[13px] font-medium text-amber-800">{{ $appliedCoupon }}: {{ $couponNotice }}</p>
     @endif
 </div>
 @endif
 
 <div class="mb-3 space-y-1">
     <div class="flex items-baseline justify-between">
-        <span class="text-[13px] font-medium text-[var(--ink-soft)]">Υποσύνολο</span>
-        <span class="price text-[13px] font-semibold">{{ number_format($totals['subtotal'], 2, ',', '.') }} €</span>
+        <span class="text-sm text-[var(--ink-soft)]">Υποσύνολο</span>
+        <span class="price text-sm font-semibold">{{ number_format($totals['subtotal'], 2, ',', '.') }} €</span>
     </div>
 
     @if($hasDiscount)
         <div class="flex items-baseline justify-between text-emerald-700">
-            <span class="text-[13px] font-medium">Έκπτωση ({{ $appliedCoupon }})</span>
-            <span class="price text-[13px] font-semibold">−{{ number_format($totals['discount'], 2, ',', '.') }} €</span>
+            <span class="text-sm">Έκπτωση ({{ $appliedCoupon }})</span>
+            <span class="price text-sm font-semibold">−{{ number_format($totals['discount'], 2, ',', '.') }} €</span>
         </div>
     @endif
 
-    <div class="flex items-baseline justify-between pt-0.5">
-        <span class="text-[13px] font-semibold">Σύνολο</span>
-        <span class="price font-display {{ $scope === 'mobile' ? 'text-2xl' : 'text-xl' }} font-extrabold" style="color: var(--accent)">{{ number_format($totals['total'], 2, ',', '.') }} €</span>
+    <div class="flex items-baseline justify-between pt-1">
+        <span class="text-base font-bold">Σύνολο</span>
+        <span class="price font-display text-xl font-extrabold">{{ number_format($totals['total'], 2, ',', '.') }} €</span>
     </div>
 
     @if($remainingForMinimumOrder > 0)
-        <p class="pt-0.5 text-[11.5px] font-semibold text-amber-700">
+        <p class="pt-0.5 text-[13px] font-semibold text-amber-800">
             Χρειάζονται ακόμη {{ number_format($remainingForMinimumOrder, 2, ',', '.') }} € για την ελάχιστη παραγγελία.
         </p>
     @else
-        <p class="pt-0.5 text-[11.5px] font-medium text-[var(--ink-soft)]">
+        <p class="pt-0.5 text-[13px] text-[var(--muted)]">
             Ελάχιστη παραγγελία {{ number_format($minimumOrderAmount, 2, ',', '.') }} €
         </p>
     @endif
