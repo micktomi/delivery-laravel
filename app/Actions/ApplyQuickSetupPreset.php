@@ -26,13 +26,12 @@ class ApplyQuickSetupPreset
     /**
      * @return array{categories: list<string>, option_groups: list<string>, option_values: int}
      */
-    public function execute(QuickSetupPreset $preset, bool $allowNonEmptyCatalogue = false): array
+    public function execute(QuickSetupPreset $preset): array
     {
-        if (! $allowNonEmptyCatalogue && $this->catalogueHasExistingData()) {
+        if ($this->catalogueHasExistingData()) {
             throw ValidationException::withMessages([
                 'preset' => 'Ο κατάλογος δεν είναι άδειος (υπάρχουν ήδη κατηγορίες ή ομάδες επιλογών). '
-                    .'Επιλέξτε "Προχώρηση παρόλο που υπάρχουν ήδη δεδομένα" αν θέλετε να συνεχίσετε — '
-                    .'δεν αντικαθίσταται ή διαγράφεται τίποτα υπάρχον.',
+                    .'Το Γρήγορο Στήσιμο εφαρμόζεται μόνο σε άδειο κατάλογο.',
             ]);
         }
 

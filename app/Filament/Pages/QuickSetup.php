@@ -5,7 +5,6 @@ namespace App\Filament\Pages;
 use App\Actions\ApplyQuickSetupPreset;
 use App\Enums\QuickSetupPreset;
 use Filament\Actions\Action;
-use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -40,7 +39,6 @@ class QuickSetup extends Page implements HasForms
     /** @var array<string, mixed>|null */
     public ?array $data = [
         'preset' => null,
-        'allow_non_empty' => false,
     ];
 
     public function mount(): void
@@ -60,9 +58,6 @@ class QuickSetup extends Page implements HasForms
             Placeholder::make('preview')
                 ->label('Θα δημιουργηθούν')
                 ->content(fn (Get $get): HtmlString => $this->preview($get('preset'))),
-            Checkbox::make('allow_non_empty')
-                ->label('Προχώρηση παρόλο που υπάρχουν ήδη κατηγορίες ή ομάδες επιλογών')
-                ->helperText('Δεν αντικαθίσταται ή διαγράφεται τίποτα υπάρχον — απλώς δεν σταματάει επειδή ο κατάλογος δεν είναι άδειος.'),
         ])->statePath('data');
     }
 
@@ -91,7 +86,7 @@ class QuickSetup extends Page implements HasForms
         $preset = QuickSetupPreset::from($data['preset']);
 
         try {
-            $result = app(ApplyQuickSetupPreset::class)->execute($preset, (bool) $data['allow_non_empty']);
+            $result = app(ApplyQuickSetupPreset::class)->execute($preset);
         } catch (ValidationException $e) {
             Notification::make()
                 ->title('Δεν εφαρμόστηκε το πρότυπο')

@@ -182,31 +182,23 @@ class QuickSetupTest extends TestCase
         app(ApplyQuickSetupPreset::class)->execute(QuickSetupPreset::GrillHouse);
     }
 
-    public function test_the_override_flag_allows_running_on_a_non_empty_catalogue_without_touching_existing_data(): void
-    {
-        $existing = Category::create(['name' => 'Υπάρχουσα', 'slug' => 'existing', 'sort_order' => 0, 'is_active' => true]);
-
-        app(ApplyQuickSetupPreset::class)->execute(QuickSetupPreset::GrillHouse, allowNonEmptyCatalogue: true);
-
-        $this->assertDatabaseHas('categories', ['id' => $existing->id, 'name' => 'Υπάρχουσα']);
-        $this->assertTrue(Category::where('name', 'Σουβλάκια')->exists());
-    }
-
-    public function test_running_the_same_preset_twice_creates_no_duplicates(): void
+    public function test_running_the_same_preset_twice_is_refused_and_creates_no_duplicates(): void
     {
         app(ApplyQuickSetupPreset::class)->execute(QuickSetupPreset::GrillHouse);
         $categoryCountAfterFirst = Category::count();
         $groupCountAfterFirst = OptionGroup::count();
         $valueCountAfterFirst = OptionValue::count();
 
-        $result = app(ApplyQuickSetupPreset::class)->execute(QuickSetupPreset::GrillHouse, allowNonEmptyCatalogue: true);
+        try {
+            app(ApplyQuickSetupPreset::class)->execute(QuickSetupPreset::GrillHouse);
+            $this->fail('Expected the second run to be refused.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('preset', $e->validator->errors()->toArray());
+        }
 
         $this->assertSame($categoryCountAfterFirst, Category::count());
         $this->assertSame($groupCountAfterFirst, OptionGroup::count());
         $this->assertSame($valueCountAfterFirst, OptionValue::count());
-        $this->assertSame([], $result['categories']);
-        $this->assertSame([], $result['option_groups']);
-        $this->assertSame(0, $result['option_values']);
     }
 
     public function test_no_business_type_column_exists_anywhere_the_preset_touches(): void
@@ -253,14 +245,13 @@ class QuickSetupTest extends TestCase
         $this->assertSame(3, OptionGroup::count());
     }
 
-    public function test_admin_page_refuses_without_the_override_when_catalogue_is_not_empty(): void
+    public function test_admin_page_refuses_when_catalogue_is_not_empty(): void
     {
         Category::create(['name' => 'Υπάρχουσα', 'slug' => 'existing', 'sort_order' => 0, 'is_active' => true]);
 
         Livewire::actingAs($this->admin())
             ->test(QuickSetup::class)
             ->set('data.preset', QuickSetupPreset::GrillHouse->value)
-            ->set('data.allow_non_empty', false)
             ->call('apply');
 
         $this->assertSame(1, Category::count());
