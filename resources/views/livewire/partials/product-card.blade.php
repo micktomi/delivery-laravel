@@ -21,28 +21,34 @@
     @else
         disabled
     @endif
-    class="group relative flex w-full items-center gap-3 overflow-visible border-b border-[var(--hairline)] py-3 text-left transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55 disabled:grayscale sm:flex-col sm:items-stretch sm:gap-0 sm:overflow-hidden sm:rounded-2xl sm:border sm:py-0 lg:rounded-[1.15rem] lg:transition-[border-color,box-shadow,transform] lg:duration-200 lg:hover:-translate-y-0.5 lg:hover:shadow-[0_16px_30px_-22px_rgb(28_18_6_/_0.45)]"
+    class="group relative flex w-full min-w-0 max-w-full items-center gap-2.5 overflow-hidden border-b border-[var(--hairline)] py-3 text-left transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55 disabled:grayscale sm:flex-col sm:items-stretch sm:gap-0 sm:rounded-2xl sm:border sm:py-0 lg:rounded-[1.15rem] lg:transition-[border-color,box-shadow,transform] lg:duration-200 lg:hover:-translate-y-0.5 lg:hover:shadow-[0_16px_30px_-22px_rgb(28_18_6_/_0.45)]"
 >
-    @if($product->image_url)
-        <img
-            data-product-image
-            src="{{ $product->image_url }}"
-            alt="{{ $product->name }}"
-            loading="lazy"
-            decoding="async"
-            class="order-2 size-[76px] shrink-0 rounded-2xl object-cover sm:order-none sm:aspect-square sm:h-auto sm:w-full sm:rounded-none"
-        >
-    @else
-        <div data-product-placeholder aria-hidden="true" class="order-2 grid size-[76px] shrink-0 place-items-center rounded-2xl {{ $placeholderTint }} sm:order-none sm:aspect-square sm:h-auto sm:w-full sm:rounded-none">
+    <div
+        data-product-media
+        class="relative order-2 size-[68px] shrink-0 overflow-hidden rounded-2xl {{ $placeholderTint }} sm:order-none sm:aspect-square sm:h-auto sm:w-full sm:rounded-none"
+    >
+        <div data-product-placeholder aria-hidden="true" class="absolute inset-0 grid place-items-center">
             <svg class="size-7 opacity-70 sm:size-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M7 9h10l-1 10H8L7 9Z"/>
                 <path d="M9 9V7a3 3 0 0 1 6 0v2"/>
                 <path d="M10 13h4"/>
             </svg>
         </div>
-    @endif
 
-    <div class="order-1 flex min-w-0 flex-1 flex-col pr-1 sm:order-none sm:p-3 lg:p-[1.125rem]">
+        @if($product->image_url)
+        <img
+            data-product-image
+            src="{{ $product->image_url }}"
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onerror="this.hidden = true"
+            class="absolute inset-0 size-full object-cover"
+        >
+        @endif
+    </div>
+
+    <div class="order-1 flex min-w-0 flex-1 flex-col sm:order-none sm:p-3 lg:p-[1.125rem]">
         <p class="clamp-2 text-[15px] font-semibold leading-snug sm:min-h-[34px] sm:text-[13.5px] lg:text-[14px]">{{ $product->name }}</p>
 
         @if($product->description)
@@ -62,14 +68,14 @@
             @if(! $available)
                 <span class="text-[11px] font-semibold text-[var(--ink-soft)]">Μη διαθέσιμο</span>
             @elseif($hasOptions)
-                <span class="absolute bottom-1 right-0 grid size-7 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-white shadow-[0_3px_8px_rgb(180_83_9_/_0.35)] transition group-hover:bg-[var(--accent-hover)] sm:static sm:size-8 sm:rounded-lg sm:border sm:border-[var(--hairline)] sm:bg-transparent sm:text-[var(--ink-soft)] sm:shadow-none sm:group-hover:border-[var(--accent)] sm:group-hover:bg-transparent sm:group-hover:text-[var(--accent)] lg:size-9 lg:rounded-xl lg:group-hover:shadow-sm">
+                <span class="absolute bottom-1.5 right-1.5 grid size-7 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-white shadow-[0_3px_8px_rgb(180_83_9_/_0.35)] transition group-hover:bg-[var(--accent-hover)] sm:static sm:size-8 sm:rounded-lg sm:border sm:border-[var(--hairline)] sm:bg-transparent sm:text-[var(--ink-soft)] sm:shadow-none sm:group-hover:border-[var(--accent)] sm:group-hover:bg-transparent sm:group-hover:text-[var(--accent)] lg:size-9 lg:rounded-xl lg:group-hover:shadow-sm">
                     <svg class="size-4 sm:hidden" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M10 5v10M5 10h10"/></svg>
                     <svg class="hidden size-4 sm:block" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5l5 5-5 5"/></svg>
                 </span>
             @else
                 <span
                     x-bind:class="addButtonClass({{ $product->id }})"
-                    class="absolute bottom-1 right-0 grid size-7 shrink-0 place-items-center rounded-full shadow-[0_3px_8px_rgb(180_83_9_/_0.35)] transition sm:static sm:size-8 sm:rounded-lg sm:shadow-none lg:size-9 lg:rounded-xl lg:shadow-sm lg:group-hover:shadow-md"
+                    class="absolute bottom-1.5 right-1.5 grid size-7 shrink-0 place-items-center rounded-full shadow-[0_3px_8px_rgb(180_83_9_/_0.35)] transition sm:static sm:size-8 sm:rounded-lg sm:shadow-none lg:size-9 lg:rounded-xl lg:shadow-sm lg:group-hover:shadow-md"
                 >
                     <svg x-show="notAdded({{ $product->id }})" class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M10 5v10M5 10h10"/></svg>
                     <svg x-cloak x-show="isAdded({{ $product->id }})" class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5l4 4 8-9"/></svg>

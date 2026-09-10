@@ -58,6 +58,21 @@ class ProductImageTest extends TestCase
             ->assertSeeHtml('src="'.Storage::disk('public')->url($product->image).'"');
     }
 
+    public function test_product_media_reserves_mobile_geometry_and_hides_a_failed_image(): void
+    {
+        $category = $this->category('Καφέδες');
+        $product = $this->product('Πολύ μακρύ όνομα προϊόντος', 'products/missing.jpg', $category);
+
+        $html = view('livewire.partials.product-card', compact('product', 'category'))->render();
+
+        $this->assertStringContainsString('data-product-media', $html);
+        $this->assertStringContainsString('size-[68px] shrink-0 overflow-hidden', $html);
+        $this->assertStringContainsString('alt=""', $html);
+        $this->assertStringContainsString('onerror="this.hidden = true"', $html);
+        $this->assertStringContainsString('right-1.5', $html);
+        $this->assertStringContainsString('min-w-0 max-w-full', $html);
+    }
+
     public function test_a_product_without_an_image_renders_a_placeholder_without_an_empty_source(): void
     {
         $category = $this->category('Καφέδες');
