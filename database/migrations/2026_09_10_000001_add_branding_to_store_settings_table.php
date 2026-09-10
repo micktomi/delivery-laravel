@@ -20,6 +20,15 @@ return new class extends Migration
         });
     }
 
-    /** Intentionally no-op: this migration is expand-only for safe code rollback. */
-    public function down(): void {}
+    public function down(): void
+    {
+        Schema::table('store_settings', function (Blueprint $table): void {
+            $table->dropColumn([
+                'store_name',
+                'logo_path',
+                'brand_primary',
+                'brand_accent',
+            ]);
+        });
+    }
 };
