@@ -106,6 +106,7 @@ trap cleanup_on_failure EXIT
 
 log "extracting $ARTIFACT into $RELEASE_DIR"
 mkdir -p "$RELEASE_DIR"
+chmod 755 "$RELEASE_DIR"
 CANDIDATE_CREATED=1
 tar -xzf "$ARTIFACT" -C "$RELEASE_DIR"
 require_file "$RELEASE_DIR/artisan" "extracted release is missing artisan — bad artifact"
@@ -143,7 +144,7 @@ elif [[ "$DB_CONNECTION" == "mysql" ]]; then
         log "backing up MySQL database ($DB_DATABASE) to $BACKUP_FILE"
         DB_HOST="$(env_get "$ENV_FILE" DB_HOST)"; DB_PORT="$(env_get "$ENV_FILE" DB_PORT)"
         DB_USERNAME="$(env_get "$ENV_FILE" DB_USERNAME)"; DB_PASSWORD="$(env_get "$ENV_FILE" DB_PASSWORD)"
-        MYSQL_PWD="$DB_PASSWORD" mysqldump --single-transaction --quick \
+        MYSQL_PWD="$DB_PASSWORD" mysqldump --no-defaults --protocol=TCP --single-transaction --quick \
             -h "${DB_HOST:-127.0.0.1}" -P "${DB_PORT:-3306}" -u "$DB_USERNAME" "$DB_DATABASE" \
             | gzip > "$BACKUP_FILE"
         [[ -s "$BACKUP_FILE" ]] || die "mysqldump produced an empty backup: $BACKUP_FILE"
