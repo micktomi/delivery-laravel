@@ -339,7 +339,7 @@
         ])->values()->all()),
 
         // A group can be gated by a specific value chosen elsewhere on the
-        // same product (e.g. an optional add-on group that a "plain" choice
+        // same product (e.g. an optional add-on group that a plain choice
         // makes moot) — driven entirely by each group's
         // hidden_when_option_value_id, never by a group/option name.
         isValueSelected(valueId) {
