@@ -14,7 +14,6 @@ use App\Models\User;
 use App\Services\CartService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Mockery;
 use RuntimeException;
@@ -40,16 +39,17 @@ class ProductionHighRegressionTest extends TestCase
 
     public function test_replayed_checkout_snapshot_with_the_same_key_returns_one_order(): void
     {
-        $line = $this->seedCart();
+        $this->seedCart();
+        $cartSnapshot = session('cart');
         $checkout = $this->checkoutData([
-            'checkout_token' => (string) Str::uuid(),
+            'checkout_token' => app(CartService::class)->checkoutToken(),
         ]);
 
         $first = app(CreateOrder::class)->execute($checkout);
 
         // Recreate the cart state carried by a concurrent request that started
         // before the first response cleared the session cart.
-        app(CartService::class)->add($line);
+        session(['cart' => $cartSnapshot]);
         $second = app(CreateOrder::class)->execute($checkout);
 
         $this->assertSame($first->getKey(), $second->getKey());

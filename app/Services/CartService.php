@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Coupon;
 use App\Models\Product;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Str;
+use Ramsey\Uuid\Uuid;
 
 class CartService
 {
@@ -17,6 +19,31 @@ class CartService
     public function items(): array
     {
         return $this->state()['lines'];
+    }
+
+    public function checkoutToken(): string
+    {
+        $token = Session::get(self::KEY.'.checkout_token');
+
+        if (is_string($token) && Str::isUuid($token)) {
+            return $token;
+        }
+
+        if (! Session::has(self::KEY)) {
+            return (string) Str::uuid();
+        }
+
+        // Carts saved before tokens existed must resolve identically even if
+        // two checkout requests read that old session at the same time.
+        $token = Uuid::uuid5(Uuid::NAMESPACE_URL, hash_hmac(
+            'sha256',
+            Session::getId().serialize($this->state()),
+            (string) config('app.key'),
+        ))->toString();
+
+        Session::put(self::KEY, $this->state() + ['checkout_token' => $token]);
+
+        return $token;
     }
 
     /**
@@ -217,9 +244,14 @@ class CartService
 
     private function put(array $lines, ?string $couponCode): void
     {
+        $token = Session::has(self::KEY)
+            ? $this->checkoutToken()
+            : (string) Str::uuid();
+
         Session::put(self::KEY, [
             'lines' => array_values($lines),
             'coupon_code' => $couponCode,
+            'checkout_token' => $token,
         ]);
     }
 }

@@ -8,8 +8,8 @@ use App\Services\CartService;
 use App\Support\StoreSchedule;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Throwable;
 
@@ -36,6 +36,7 @@ class CheckoutPage extends Component
 
     public string $payment_method = PaymentMethod::Cash->value;
 
+    #[Locked]
     public string $checkoutToken = '';
 
     public ?int $confirmedOrderNumber = null;
@@ -52,7 +53,7 @@ class CheckoutPage extends Component
 
     public function mount(): void
     {
-        $this->checkoutToken = (string) Str::uuid();
+        $this->checkoutToken = app(CartService::class)->checkoutToken();
         $storedUnavailableProductNotice = session(CartService::UNAVAILABLE_PRODUCT_NOTICE_SESSION_KEY);
         $this->unavailableProductNotice = is_string($storedUnavailableProductNotice)
             ? $storedUnavailableProductNotice
