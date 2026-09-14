@@ -13,7 +13,9 @@ use App\Services\CartService;
 use App\Services\OptionsPresenter;
 use App\Services\PricingService;
 use App\Support\StoreSchedule;
+use Illuminate\Contracts\Database\ConcurrencyErrorDetector;
 use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -32,7 +34,7 @@ class CreateOrder
     {
         $this->assertStoreAcceptingOrders();
 
-        $checkoutToken = $checkoutData['checkout_token'] ?? (string) Str::uuid();
+        $checkoutToken = $checkoutData['checkout_token'] ?? $this->cart->checkoutToken();
 
         if (! is_string($checkoutToken) || ! Str::isUuid($checkoutToken)) {
             throw ValidationException::withMessages([
@@ -51,6 +53,14 @@ class CreateOrder
 
         try {
             [$order, $itemCount] = DB::transaction(function () use ($checkoutData, $checkoutToken) {
+                // A deadlock retry starts a new transaction and must first
+                // resolve any order committed by the competing request.
+                $existingOrder = Order::query()->where('checkout_token', $checkoutToken)->first();
+
+                if ($existingOrder) {
+                    return [$existingOrder, null];
+                }
+
                 $cartItems = $this->verifiedLines();
 
                 $subtotal = $this->pricing->subtotal($cartItems);
@@ -124,8 +134,13 @@ class CreateOrder
                 }
 
                 return [$order, count($cartItems)];
-            });
+            }, attempts: 3);
         } catch (QueryException $e) {
+            if (! ($e instanceof UniqueConstraintViolationException)
+                && ! app(ConcurrencyErrorDetector::class)->causedByConcurrencyError($e)) {
+                throw $e;
+            }
+
             // A concurrent request with the same signed Livewire snapshot may
             // win the unique checkout_token insert while this transaction waits.
             $order = Order::query()->where('checkout_token', $checkoutToken)->first();
@@ -140,7 +155,9 @@ class CreateOrder
         }
 
         $this->clearCartAfterCommit($order);
-        $this->logCreatedOrder($order, $itemCount);
+        if ($itemCount !== null) {
+            $this->logCreatedOrder($order, $itemCount);
+        }
 
         return $order;
     }
@@ -148,6 +165,10 @@ class CreateOrder
     private function clearCartAfterCommit(Order $order): void
     {
         try {
+            if ($this->cart->isEmpty() || $this->cart->checkoutToken() !== $order->checkout_token) {
+                return;
+            }
+
             // A rollback must leave the customer holding the same basket.
             $this->cart->clear();
         } catch (Throwable $e) {
