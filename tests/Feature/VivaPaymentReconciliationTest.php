@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
+use App\Livewire\OrderBoard;
 use App\Models\Order;
+use App\Models\User;
 use App\Services\VivaWalletService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -13,7 +15,9 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
+use Livewire\Livewire;
 use Mockery;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Psr\Log\LoggerInterface;
 use Tests\TestCase;
 
@@ -27,6 +31,7 @@ class VivaPaymentReconciliationTest extends TestCase
 
         CarbonImmutable::setTestNow('2026-08-28 12:00:00');
         $this->configureViva();
+        Http::preventStrayRequests();
     }
 
     protected function tearDown(): void
@@ -48,6 +53,12 @@ class VivaPaymentReconciliationTest extends TestCase
         $this->assertSame('paid', $order->payment_status);
         $this->assertSame($transactionId, $order->viva_transaction_id);
         $this->assertNotNull($order->paid_at);
+        // No callback or webhook is invoked: the stored order code is enough.
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://demo.vivapayments.com/api/transactions/?ordercode='.$order->viva_order_code
+            && $request->hasHeader('Authorization', 'Basic '.base64_encode('test-merchant-id:test-merchant-api-key')));
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://demo-api.vivapayments.com/checkout/v2/transactions/'.$transactionId
+            && $request->hasHeader('Authorization', 'Bearer test-access-token'));
+        Http::assertSentCount(3);
     }
 
     public function test_pending_payment_without_a_viva_transaction_remains_pending(): void
@@ -114,13 +125,12 @@ class VivaPaymentReconciliationTest extends TestCase
         $order = $this->vivaOrder();
         $transactionId = (string) Str::uuid();
         $webhookProcessed = false;
-        $transaction = $this->verifiedTransaction($order, ['transactionId' => $transactionId]);
+        $transaction = $this->verifiedTransaction($order);
 
         Http::fake([
-            'https://demo.vivapayments.com/api/orders/'.$order->viva_order_code => Http::response([
-                'OrderCode' => $order->viva_order_code,
-                'TransactionId' => $transactionId,
-            ]),
+            'https://demo.vivapayments.com/api/transactions/?ordercode='.$order->viva_order_code => Http::response(
+                $this->searchResponse($order, $transactionId),
+            ),
             'https://demo-accounts.vivapayments.com/connect/token' => Http::response([
                 'access_token' => 'test-access-token',
                 'expires_in' => 3600,
@@ -158,15 +168,23 @@ class VivaPaymentReconciliationTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_cancelled_order_is_not_reconciled(): void
+    public function test_paid_cancelled_order_is_recorded_for_manual_refund_without_reopening(): void
     {
         $order = $this->vivaOrder(['status' => OrderStatus::Cancelled->value]);
-        Http::fake();
+        $transactionId = (string) Str::uuid();
+        $this->fakeReconciliation($order, $transactionId);
+        $this->expectPaymentLog('viva.payment_received_after_cancellation', fn (array $context): bool => $context['order_id'] === $order->id
+            && $context['action_required'] === 'refund_or_manual_review', 'critical');
 
         $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
 
-        $this->assertSame('pending', $order->fresh()->payment_status);
-        Http::assertNothingSent();
+        $this->assertSame('paid', $order->fresh()->payment_status);
+        $this->assertSame(OrderStatus::Cancelled, $order->fresh()->status);
+        $this->assertSame($transactionId, $order->fresh()->viva_transaction_id);
+        $this->assertNotNull($order->fresh()->paid_at);
+        $this->assertDatabaseCount('print_jobs', 0);
+        Livewire::actingAs(User::factory()->create())
+            ->test(OrderBoard::class)->assertDontSee($order->customer_name);
     }
 
     public function test_reconciliation_is_scheduled_every_five_minutes_without_overlap(): void
@@ -185,6 +203,126 @@ class VivaPaymentReconciliationTest extends TestCase
 
         $this->assertNotNull($webhook);
         $this->assertNotContains('throttle:60,1', $webhook->gatherMiddleware());
+    }
+
+    public static function rejectedVerifiedTransactions(): array
+    {
+        return [
+            'wrong order' => [['orderCode' => 9999999999999999]],
+            'failed' => [['statusId' => 'E']],
+            'in progress' => [['statusId' => 'A']],
+            'cancelled payment' => [['statusId' => 'X']],
+        ];
+    }
+
+    #[DataProvider('rejectedVerifiedTransactions')]
+    public function test_search_success_never_overrides_retrieve_transaction_verification(array $overrides): void
+    {
+        $order = $this->vivaOrder();
+        $this->fakeReconciliation($order, (string) Str::uuid(), $overrides);
+
+        $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
+
+        $this->assertSame('pending', $order->fresh()->payment_status);
+        $this->assertNull($order->fresh()->viva_transaction_id);
+        $this->assertNull($order->fresh()->paid_at);
+    }
+
+    public function test_reconciliation_recovers_a_payment_after_a_week_long_outage(): void
+    {
+        $order = $this->vivaOrder(['created_at' => now()->subWeek(), 'placed_at' => now()->subWeek()]);
+        $transactionId = (string) Str::uuid();
+        $this->fakeReconciliation($order, $transactionId);
+
+        $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
+
+        $this->assertSame('paid', $order->fresh()->payment_status);
+        $this->assertSame($transactionId, $order->fresh()->viva_transaction_id);
+    }
+
+    public function test_mismatched_lookup_order_is_not_verified_or_paid(): void
+    {
+        $order = $this->vivaOrder();
+        $transactionId = (string) Str::uuid();
+        $search = $this->searchResponse($order, $transactionId);
+        $search['Transactions'][0]['Order']['OrderCode']++;
+        $this->fakeReconciliation($order, $transactionId, [], $search);
+
+        $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
+
+        $this->assertSame('pending', $order->fresh()->payment_status);
+        Http::assertSentCount(1);
+    }
+
+    public function test_unsuccessful_search_envelope_is_a_retryable_failure(): void
+    {
+        $order = $this->vivaOrder();
+        $transactionId = (string) Str::uuid();
+        $search = $this->searchResponse($order, $transactionId);
+        $search['Success'] = false;
+        $search['ErrorCode'] = 1;
+        $this->fakeReconciliation($order, $transactionId, [], $search);
+
+        $this->artisan('viva:reconcile-pending-payments')->assertExitCode(1);
+
+        $this->assertSame('pending', $order->fresh()->payment_status);
+        Http::assertSentCount(1);
+    }
+
+    public function test_failed_attempt_does_not_hide_a_later_successful_transaction(): void
+    {
+        $order = $this->vivaOrder();
+        $failedId = (string) Str::uuid();
+        $paidId = (string) Str::uuid();
+        $search = $this->searchResponse($order, $failedId);
+        $search['Transactions'][] = $this->searchResponse($order, $paidId)['Transactions'][0];
+        Http::fake([
+            'https://demo.vivapayments.com/api/transactions/?ordercode='.$order->viva_order_code => Http::response($search),
+            'https://demo-accounts.vivapayments.com/connect/token' => Http::response(['access_token' => 'test-access-token', 'expires_in' => 3600]),
+            'https://demo-api.vivapayments.com/checkout/v2/transactions/'.$failedId => Http::response($this->verifiedTransaction($order, ['statusId' => 'E'])),
+            'https://demo-api.vivapayments.com/checkout/v2/transactions/'.$paidId => Http::response($this->verifiedTransaction($order)),
+        ]);
+
+        $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
+
+        $this->assertSame('paid', $order->fresh()->payment_status);
+        $this->assertSame($paidId, $order->fresh()->viva_transaction_id);
+    }
+
+    public function test_duplicate_webhook_after_reconciliation_does_not_change_payment(): void
+    {
+        $order = $this->vivaOrder();
+        $transactionId = (string) Str::uuid();
+        $this->fakeReconciliation($order, $transactionId);
+        $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
+        $paidAt = $order->fresh()->paid_at->toISOString();
+
+        $this->assertSame('duplicate', app(VivaWalletService::class)->processWebhook(
+            $this->webhookPayload($transactionId, $order->viva_order_code),
+        ));
+        $this->assertSame($paidAt, $order->fresh()->paid_at->toISOString());
+        $this->assertSame(1, Order::where('viva_transaction_id', $transactionId)->count());
+    }
+
+    public function test_reconciliation_preserves_cancellation_that_occurs_during_verification(): void
+    {
+        $order = $this->vivaOrder();
+        $transactionId = (string) Str::uuid();
+        Http::fake([
+            'https://demo.vivapayments.com/api/transactions/?ordercode='.$order->viva_order_code => Http::response($this->searchResponse($order, $transactionId)),
+            'https://demo-accounts.vivapayments.com/connect/token' => Http::response(['access_token' => 'test-access-token', 'expires_in' => 3600]),
+            'https://demo-api.vivapayments.com/checkout/v2/transactions/'.$transactionId => function () use ($order) {
+                $order->update(['status' => OrderStatus::Cancelled]);
+
+                return Http::response($this->verifiedTransaction($order));
+            },
+        ]);
+
+        $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
+
+        $this->assertSame(OrderStatus::Cancelled, $order->fresh()->status);
+        $this->assertSame('paid', $order->fresh()->payment_status);
+        $this->assertDatabaseCount('print_jobs', 0);
     }
 
     private function configureViva(): void
@@ -215,13 +353,12 @@ class VivaPaymentReconciliationTest extends TestCase
         ], $overrides));
     }
 
-    private function fakeReconciliation(Order $order, ?string $transactionId, array $overrides = []): void
+    private function fakeReconciliation(Order $order, ?string $transactionId, array $overrides = [], ?array $search = null): void
     {
         $responses = [
-            'https://demo.vivapayments.com/api/orders/'.$order->viva_order_code => Http::response([
-                'OrderCode' => $order->viva_order_code,
-                'TransactionId' => $transactionId,
-            ]),
+            'https://demo.vivapayments.com/api/transactions/?ordercode='.$order->viva_order_code => Http::response(
+                $search ?? $this->searchResponse($order, $transactionId),
+            ),
         ];
 
         if ($transactionId !== null) {
@@ -230,7 +367,7 @@ class VivaPaymentReconciliationTest extends TestCase
                 'expires_in' => 3600,
             ]);
             $responses['https://demo-api.vivapayments.com/checkout/v2/transactions/'.$transactionId] = Http::response(
-                $this->verifiedTransaction($order, array_merge(['transactionId' => $transactionId], $overrides)),
+                $this->verifiedTransaction($order, $overrides),
             );
         }
 
@@ -239,12 +376,27 @@ class VivaPaymentReconciliationTest extends TestCase
 
     private function verifiedTransaction(Order $order, array $overrides = []): array
     {
-        return array_merge([
-            'amount' => 5.00,
-            'orderCode' => $order->viva_order_code,
-            'statusId' => 'F',
-            'currencyCode' => '978',
+        return array_merge($this->fixture('retrieve-transaction'), [
+            'orderCode' => (int) $order->viva_order_code,
         ], $overrides);
+    }
+
+    private function fixture(string $name): array
+    {
+        return json_decode(file_get_contents(base_path('tests/Fixtures/viva/'.$name.'.json')), true, flags: JSON_THROW_ON_ERROR);
+    }
+
+    private function searchResponse(Order $order, ?string $transactionId): array
+    {
+        $response = $this->fixture('transaction-search');
+        if ($transactionId === null) {
+            $response['Transactions'] = [];
+        } else {
+            $response['Transactions'][0]['TransactionId'] = $transactionId;
+            $response['Transactions'][0]['Order']['OrderCode'] = (int) $order->viva_order_code;
+        }
+
+        return $response;
     }
 
     private function webhookPayload(string $transactionId, string $orderCode): array
@@ -258,12 +410,12 @@ class VivaPaymentReconciliationTest extends TestCase
         ];
     }
 
-    private function expectPaymentLog(string $event, callable $contextMatches): void
+    private function expectPaymentLog(string $event, callable $contextMatches, string $level = 'warning'): void
     {
         $paymentLogger = Mockery::mock(LoggerInterface::class);
         $paymentLogger->shouldReceive('log')
             ->once()
-            ->with('warning', $event, Mockery::on($contextMatches));
+            ->with($level, $event, Mockery::on($contextMatches));
 
         Log::shouldReceive('channel')->once()->with('payments')->andReturn($paymentLogger);
     }

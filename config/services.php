@@ -44,8 +44,8 @@ return [
         'webhook_verification_key' => env('VIVA_WEBHOOK_VERIFICATION_KEY'),
         // Legacy Merchant API credentials used only to resolve a payment
         // order to its transaction ID during missed-webhook reconciliation.
-        'reconciliation_merchant_id' => env('VIVA_RECONCILIATION_MERCHANT_ID'),
-        'reconciliation_api_key' => env('VIVA_RECONCILIATION_API_KEY'),
+        'reconciliation_merchant_id' => env('VIVA_RECONCILIATION_MERCHANT_ID', env('VIVA_MERCHANT_ID')),
+        'reconciliation_api_key' => env('VIVA_RECONCILIATION_API_KEY', env('VIVA_API_KEY')),
     ],
 
 ];

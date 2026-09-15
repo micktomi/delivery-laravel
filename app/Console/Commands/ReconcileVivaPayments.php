@@ -13,11 +13,9 @@ class ReconcileVivaPayments extends Command
 {
     protected $signature = 'viva:reconcile-pending-payments';
 
-    protected $description = 'Reconcile recent pending Viva payments when a webhook did not arrive.';
+    protected $description = 'Reconcile pending Viva payments when a webhook did not arrive.';
 
     private const MINIMUM_AGE_MINUTES = 5;
-
-    private const WINDOW_MINUTES = 90;
 
     public function handle(VivaWalletService $viva): int
     {
@@ -34,7 +32,6 @@ class ReconcileVivaPayments extends Command
             return self::FAILURE;
         }
 
-        $newerThan = now()->subMinutes(self::WINDOW_MINUTES);
         $olderThan = now()->subMinutes(self::MINIMUM_AGE_MINUTES);
         $results = ['paid' => 0, 'pending' => 0, 'duplicate' => 0, 'ignored' => 0, 'failed' => 0];
 
@@ -42,8 +39,8 @@ class ReconcileVivaPayments extends Command
             ->where('payment_method', PaymentMethod::Viva->value)
             ->where('payment_status', 'pending')
             ->whereNotNull('viva_order_code')
-            ->whereNotIn('status', [OrderStatus::Completed->value, OrderStatus::Cancelled->value])
-            ->whereBetween('created_at', [$newerThan, $olderThan])
+            ->where('status', '!=', OrderStatus::Completed->value)
+            ->where('created_at', '<=', $olderThan)
             ->orderBy('id')
             ->eachById(function (Order $order) use ($viva, &$results): void {
                 try {
