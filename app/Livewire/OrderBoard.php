@@ -7,16 +7,30 @@ use App\Actions\TransitionOrderStatus;
 use App\Enums\OrderStatus;
 use App\Models\Order;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
 class OrderBoard extends Component
 {
+    private const BOARD_STATUSES = [OrderStatus::Nea, OrderStatus::Preparing, OrderStatus::Ready, OrderStatus::Out];
+
     public int $lastSeenOrderId = 0;
+
+    /**
+     * The orders this board showed at its last render. An order missing here
+     * is newly eligible even when its id is below $lastSeenOrderId, e.g. an
+     * older Viva order whose payment was confirmed after a newer cash order.
+     *
+     * @var list<int>
+     */
+    #[Locked]
+    public array $boardOrderIds = [];
 
     public function mount(): void
     {
-        $this->lastSeenOrderId = (int) Order::readyForFulfilment()->max('id');
+        $this->boardOrderIds = $this->eligibleOrderIds();
+        $this->lastSeenOrderId = max([0, ...$this->boardOrderIds]);
     }
 
     /**
@@ -65,10 +79,8 @@ class OrderBoard extends Component
 
     public function render()
     {
-        $statuses = [OrderStatus::Nea, OrderStatus::Preparing, OrderStatus::Ready, OrderStatus::Out];
-
         $columns = [];
-        foreach ($statuses as $status) {
+        foreach (self::BOARD_STATUSES as $status) {
             $columns[$status->value] = [
                 'status' => $status,
                 'orders' => Order::where('status', $status->value)
@@ -79,8 +91,15 @@ class OrderBoard extends Component
             ];
         }
 
-        $currentMaxId = (int) Order::readyForFulfilment()->max('id');
-        $hasNewOrders = $currentMaxId > $this->lastSeenOrderId;
+        $orderIds = $this->eligibleOrderIds();
+        $currentMaxId = max([0, ...$orderIds]);
+        $newlyEligible = array_diff($orderIds, $this->boardOrderIds);
+        $this->boardOrderIds = $orderIds;
+
+        // A new highest id is still re-announced until the board acknowledges
+        // it; an order that only now became eligible below that id is
+        // announced on this render alone, so the next poll stays quiet.
+        $hasNewOrders = $currentMaxId > $this->lastSeenOrderId || $newlyEligible !== [];
 
         if ($hasNewOrders) {
             $this->dispatch('new-orders', maxId: $currentMaxId);
@@ -90,5 +109,19 @@ class OrderBoard extends Component
             'columns' => $columns,
             'currentMaxId' => $currentMaxId,
         ])->layout('layouts.kitchen');
+    }
+
+    /**
+     * Orders the kitchen can act on: on the board and, for Viva, paid.
+     *
+     * @return list<int>
+     */
+    private function eligibleOrderIds(): array
+    {
+        return Order::whereIn('status', array_map(fn (OrderStatus $status) => $status->value, self::BOARD_STATUSES))
+            ->readyForFulfilment()
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
     }
 }
