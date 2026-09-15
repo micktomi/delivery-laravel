@@ -19,6 +19,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Js;
 use Illuminate\Validation\ValidationException;
 
 class OrderResource extends Resource
@@ -106,11 +107,24 @@ class OrderResource extends Resource
                     ->icon('heroicon-o-arrow-right')
                     ->color('success')
                     ->visible(fn (Order $record) => $record->status->nextStatus() !== null)
-                    ->action(function (Order $record) {
+                    // Filament re-queries $record when the click arrives, so its status is
+                    // already the current one. The button carries the status this row was
+                    // drawn with instead, so a stale table cannot advance a moved-on order.
+                    // (Replaces Filament's argument-less wire:click, so one click = one call.)
+                    ->alpineClickHandler(fn (Order $record): string => "\$wire.mountTableAction('advance', '{$record->getKey()}', { expected: ".Js::from($record->status->value).' })')
+                    ->action(function (Order $record, array $arguments) {
+                        $expected = is_string($arguments['expected'] ?? null)
+                            ? OrderStatus::tryFrom($arguments['expected'])
+                            : null;
+
+                        if (! $expected) {
+                            Notification::make()->title('Η κατάσταση της παραγγελίας δεν επιβεβαιώθηκε. Ανανεώστε τη λίστα και δοκιμάστε ξανά.')->danger()->send();
+
+                            return;
+                        }
+
                         try {
-                            // The status this row was rendered with guards against
-                            // acting on a table that another device already moved on.
-                            app(TransitionOrderStatus::class)->execute($record, $record->status);
+                            app(TransitionOrderStatus::class)->execute($record, $expected);
                             Notification::make()->title('Κατάσταση ενημερώθηκε')->success()->send();
                         } catch (ValidationException $e) {
                             Notification::make()->title($e->validator->errors()->first())->danger()->send();
