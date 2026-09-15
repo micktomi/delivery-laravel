@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\OrderStatus;
+use App\Models\Order;
 use App\Models\PrintJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -13,10 +15,24 @@ class PrintJobController extends Controller
     public function next(): Response
     {
         return DB::transaction(function (): Response {
-            $job = PrintJob::where('status', 'pending')->whereNotNull('payload')
+            $eligible = PrintJob::where('status', 'pending')->whereNotNull('payload')
+                ->whereIn('order_id', Order::query()->select('id')->where('status', '!=', OrderStatus::Cancelled->value))
                 ->where(fn ($query) => $query->whereNull('last_attempt_at')
                     ->orWhere('last_attempt_at', '<=', now()->subSeconds(60)))
-                ->orderBy('created_at')->orderBy('id')->lockForUpdate()->first();
+                ->orderBy('created_at')->orderBy('id');
+            $candidate = (clone $eligible)->first();
+
+            if (! $candidate) {
+                return response()->noContent();
+            }
+
+            // Match cancellation/acceptance lock order: order first, then job.
+            $order = Order::query()->whereKey($candidate->order_id)->lockForUpdate()->first();
+            if (! $order || $order->status === OrderStatus::Cancelled) {
+                return response()->noContent();
+            }
+
+            $job = (clone $eligible)->whereKey($candidate->getKey())->lockForUpdate()->first();
 
             if (! $job) {
                 return response()->noContent();

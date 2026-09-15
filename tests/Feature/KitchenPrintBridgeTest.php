@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\CancelOrder;
 use App\Actions\CreateKitchenPrintJob;
 use App\Actions\TransitionOrderStatus;
 use App\Enums\OrderStatus;
@@ -272,6 +273,91 @@ class KitchenPrintBridgeTest extends TestCase
         $this->report($job, 'accepted', ['attempt' => 1, 'error' => 'invalid_payload'])->assertUnprocessable();
         $this->withToken('test-token')->postJson('/api/printing/00000000-0000-4000-8000-000000000000/accepted', ['attempt' => 1])->assertNotFound();
         $this->assertSame('pending', $job->fresh()->status);
+    }
+
+    public function test_cancelled_order_pending_job_is_skipped_without_blocking_other_orders(): void
+    {
+        $job = $this->acceptOrder();
+        Order::whereKey($job->order_id)->update(['status' => OrderStatus::Cancelled]);
+        $order = Order::factory()->create();
+        app(TransitionOrderStatus::class)->execute($order, OrderStatus::Nea);
+        $second = PrintJob::where('order_id', $order->id)->sole();
+        $this->poll()->assertJsonPath('payload.print_job_id', $second->id);
+        $this->assertSame(0, $job->fresh()->attempts);
+    }
+
+    public function test_cancellation_atomically_suppresses_never_leased_job(): void
+    {
+        $job = $this->acceptOrder();
+        $order = Order::findOrFail($job->order_id);
+        DB::beginTransaction();
+        app(CancelOrder::class)->execute($order);
+        $this->assertSame('cancelled', $job->fresh()->status);
+        DB::rollBack();
+        $this->assertSame(OrderStatus::Preparing, $order->fresh()->status);
+        $this->assertSame('pending', $job->fresh()->status);
+
+        app(CancelOrder::class)->execute($order);
+        $this->assertSame('cancelled', $job->fresh()->status);
+        $this->assertSame('order_cancelled', $job->fresh()->last_error);
+        $this->assertSame(0, $job->fresh()->attempts);
+        $this->assertNull($job->fresh()->last_attempt_at);
+        $this->artisan('printing:retry-failed')->assertSuccessful();
+        $this->poll()->assertNoContent();
+        $this->report($job, 'accepted', ['attempt' => 1])->assertConflict();
+    }
+
+    public function test_cancellation_during_live_lease_preserves_acknowledgement_and_sent_state(): void
+    {
+        $job = $this->acceptOrder();
+        $this->poll()->assertOk();
+        app(CancelOrder::class)->execute(Order::findOrFail($job->order_id));
+        $this->assertSame('pending', $job->fresh()->status);
+        $this->report($job, 'accepted', ['attempt' => 1])->assertOk();
+        $sentAt = $job->fresh()->sent_at;
+        $this->travel(61)->seconds();
+        $this->report($job, 'accepted', ['attempt' => 1])->assertOk();
+        $this->assertSame('sent', $job->fresh()->status);
+        $this->assertTrue($sentAt->equalTo($job->fresh()->sent_at));
+        $this->artisan('printing:retry-failed')->assertSuccessful();
+        $this->poll()->assertNoContent();
+        $this->assertSame(1, $job->fresh()->attempts);
+    }
+
+    public function test_cancellation_after_acceptance_does_not_clear_delivery_evidence(): void
+    {
+        $job = $this->acceptOrder();
+        $this->poll()->assertOk();
+        $this->report($job, 'accepted', ['attempt' => 1])->assertOk();
+        $before = $job->fresh()->getAttributes();
+        app(CancelOrder::class)->execute(Order::findOrFail($job->order_id));
+        $this->assertSame($before, $job->fresh()->getAttributes());
+        $this->poll()->assertNoContent();
+    }
+
+    public function test_cancelled_expired_lease_remains_uncertain_and_is_never_reissued(): void
+    {
+        $job = $this->acceptOrder();
+        $this->poll()->assertOk();
+        $before = $job->fresh()->getAttributes();
+        $this->travel(61)->seconds();
+        app(CancelOrder::class)->execute(Order::findOrFail($job->order_id));
+        $this->report($job, 'accepted', ['attempt' => 1])->assertConflict();
+        $this->report($job, 'failed', ['attempt' => 1, 'error' => 'storage_unavailable'])->assertConflict();
+        $this->artisan('printing:retry-failed')->assertSuccessful();
+        $this->poll()->assertNoContent();
+        $this->assertSame($before, $job->fresh()->getAttributes());
+    }
+
+    public function test_cancelled_live_lease_can_report_transport_failure_but_cannot_be_redelivered(): void
+    {
+        $job = $this->acceptOrder();
+        $this->poll()->assertOk();
+        app(CancelOrder::class)->execute(Order::findOrFail($job->order_id));
+        $this->report($job, 'failed', ['attempt' => 1, 'error' => 'storage_unavailable'])->assertOk();
+        $this->artisan('printing:retry-failed')->assertSuccessful();
+        $this->poll()->assertNoContent();
+        $this->assertSame(1, $job->fresh()->attempts);
     }
 
     public function test_poll_is_not_cacheable(): void

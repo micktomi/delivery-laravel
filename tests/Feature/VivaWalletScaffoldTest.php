@@ -2,14 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Actions\CancelOrder;
 use App\Actions\TransitionOrderStatus;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
+use App\Http\Controllers\VivaWalletController;
 use App\Livewire\CheckoutPage;
 use App\Models\Category;
 use App\Models\Order;
 use App\Models\Product;
 use App\Services\CartService;
+use App\Services\VivaWalletService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
@@ -21,6 +24,7 @@ use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 use Mockery;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Tests\TestCase;
 
 class VivaWalletScaffoldTest extends TestCase
@@ -409,6 +413,55 @@ class VivaWalletScaffoldTest extends TestCase
 
         $this->expectException(ValidationException::class);
         app(TransitionOrderStatus::class)->execute($pending, OrderStatus::Nea);
+    }
+
+    public function test_terminal_orders_cannot_start_or_reuse_checkout(): void
+    {
+        $this->configureViva(true);
+        Http::preventStrayRequests();
+        foreach ([OrderStatus::Cancelled, OrderStatus::Completed] as $status) {
+            foreach ([null, '7680701046572600'] as $code) {
+                $order = $this->vivaOrder(['status' => $status, 'viva_order_code' => $code]);
+                $this->withSession([self::SESSION_ORDER_KEY => $order->getRouteKey()])
+                    ->get(route('viva.start', $order))->assertConflict();
+                $this->assertSame($code, $order->fresh()->viva_order_code);
+                $order->delete();
+            }
+        }
+        Http::assertNothingSent();
+    }
+
+    public function test_start_rechecks_cancellation_after_route_binding(): void
+    {
+        $this->configureViva(true);
+        Http::preventStrayRequests();
+        $order = $this->vivaOrder(['viva_order_code' => null]);
+        session([self::SESSION_ORDER_KEY => $order->getRouteKey()]);
+        // The controller receives the stale model a concurrent cancellation left behind.
+        app(CancelOrder::class)->execute($order);
+        $this->assertSame(OrderStatus::Nea, $order->status);
+        try {
+            app(VivaWalletController::class)->start($order, app(VivaWalletService::class));
+            $this->fail('The locked state must reject a stale start request.');
+        } catch (HttpExceptionInterface $e) {
+            $this->assertSame(409, $e->getStatusCode());
+        }
+        $this->assertNull($order->fresh()->viva_order_code);
+        Http::assertNothingSent();
+    }
+
+    public function test_start_rechecks_payment_and_reuses_only_nonterminal_pending_checkout(): void
+    {
+        $this->configureViva(true);
+        Http::preventStrayRequests();
+        $order = $this->vivaOrder();
+        $this->withSession([self::SESSION_ORDER_KEY => $order->getRouteKey()])
+            ->get(route('viva.start', $order))
+            ->assertRedirect('https://demo.vivapayments.com/web/checkout?ref='.$order->viva_order_code);
+        Order::whereKey($order->id)->update(['payment_status' => 'paid']);
+        $response = app(VivaWalletController::class)->start($order, app(VivaWalletService::class));
+        $this->assertSame(route('order.track', $order), $response->getTargetUrl());
+        Http::assertNothingSent();
     }
 
     private function configureViva(bool $enabled): void

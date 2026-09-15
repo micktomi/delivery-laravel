@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Models\Order;
 use App\Services\VivaWalletService;
@@ -9,7 +10,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
 class VivaWalletController extends Controller
@@ -22,34 +25,36 @@ class VivaWalletController extends Controller
         $this->assertCustomerOwns($order);
         abort_unless($order->payment_method === PaymentMethod::Viva, 404);
 
+        abort_if(in_array($order->status, [OrderStatus::Cancelled, OrderStatus::Completed], true), 409);
+
         if ($order->payment_status === 'paid') {
             return redirect()->route('order.track', $order);
         }
 
         try {
-            $orderCode = Cache::lock('viva:start:'.$order->getKey(), 20)->block(
+            return Cache::lock('viva:start:'.$order->getKey(), 20)->block(
                 5,
-                function () use ($order, $viva): string {
-                    $order->refresh();
+                function () use ($order, $viva): RedirectResponse {
+                    // Serialize checkout creation/reuse with cancellation's order lock.
+                    return DB::transaction(function () use ($order, $viva): RedirectResponse {
+                        $fresh = Order::query()->whereKey($order->getKey())->lockForUpdate()->firstOrFail();
+                        abort_if(in_array($fresh->status, [OrderStatus::Cancelled, OrderStatus::Completed], true), 409);
 
-                    if (filled($order->viva_order_code)) {
-                        return (string) $order->viva_order_code;
-                    }
+                        if ($fresh->payment_status === 'paid') {
+                            return redirect()->route('order.track', $fresh);
+                        }
 
-                    $orderCode = $viva->createPaymentOrder($order);
+                        if (blank($fresh->viva_order_code)) {
+                            $orderCode = $viva->createPaymentOrder($fresh);
+                            $fresh->forceFill(['viva_order_code' => $orderCode])->save();
+                        }
 
-                    Order::query()
-                        ->whereKey($order->getKey())
-                        ->whereNull('viva_order_code')
-                        ->update(['viva_order_code' => $orderCode]);
-
-                    $order->refresh();
-
-                    return (string) $order->viva_order_code;
+                        return redirect()->away($viva->checkoutUrl((string) $fresh->viva_order_code));
+                    });
                 },
             );
-
-            return redirect()->away($viva->checkoutUrl($orderCode));
+        } catch (HttpExceptionInterface $e) {
+            throw $e;
         } catch (Throwable $e) {
             $viva->logPaymentEvent('error', 'viva.payment_start_failed', [
                 'order_id' => $order->getKey(),

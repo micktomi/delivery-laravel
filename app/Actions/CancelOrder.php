@@ -4,6 +4,7 @@ namespace App\Actions;
 
 use App\Enums\OrderStatus;
 use App\Models\Order;
+use App\Models\PrintJob;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -35,6 +36,14 @@ class CancelOrder
 
             $previous = $fresh->status;
             $fresh->update(['status' => OrderStatus::Cancelled->value]);
+
+            // Once leased, a ticket may already exist physically. Preserve its
+            // attempt and acknowledgement state instead of declaring it unprinted.
+            PrintJob::where('order_id', $fresh->getKey())
+                ->where('status', 'pending')
+                ->where('attempts', 0)
+                ->whereNull('last_attempt_at')
+                ->update(['status' => 'cancelled', 'last_error' => 'order_cancelled']);
 
             Log::warning('order.cancelled', [
                 'order_id' => $fresh->id,
