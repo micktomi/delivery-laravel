@@ -37,6 +37,12 @@ final class VivaPaymentHealth
                                     $query->whereNotNull('viva_transaction_id')
                                         ->orWhereNotNull('paid_at');
                                 });
+                        })
+                        // Money was taken for an order that will not be
+                        // delivered: a refund or manual review is owed.
+                        ->orWhere(function (Builder $query): void {
+                            $query->where('payment_status', 'paid')
+                                ->where('status', OrderStatus::Cancelled->value);
                         });
                 })
                 ->count(),

@@ -4,8 +4,11 @@ namespace App\Services;
 
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
+use App\Exceptions\VivaPaymentOrderCancellationException;
 use App\Models\Order;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -19,6 +22,15 @@ class VivaWalletService
     private const PAYMENT_CREATED_EVENT = 1796;
 
     private const EURO_CURRENCY_CODE = '978';
+
+    /** Payment order StateId values of the Retrieve order API. */
+    private const PAYMENT_ORDER_PENDING = 0;
+
+    private const PAYMENT_ORDER_EXPIRED = 1;
+
+    private const PAYMENT_ORDER_CANCELED = 2;
+
+    private const PAYMENT_ORDER_PAID = 3;
 
     public function createPaymentOrder(Order $order): string
     {
@@ -173,6 +185,134 @@ class VivaWalletService
     {
         return trim((string) config('services.viva.reconciliation_merchant_id')) !== ''
             && trim((string) config('services.viva.reconciliation_api_key')) !== '';
+    }
+
+    /**
+     * Makes a standing payment order unpayable at Viva before the local order
+     * is cancelled. Official Payment API (developer.viva.com, payment-api.yaml),
+     * both Basic-authenticated with the Merchant ID and API key:
+     *
+     *   GET    /api/orders/{orderCode}  StateId 0 Pending, 1 Expired, 2 Canceled, 3 Paid
+     *   DELETE /api/orders/{orderCode}  200 {Success: true, ErrorCode: 0}; 401; 404 unknown code; 5xx
+     *
+     * Returns 'cancelled', 'already_cancelled' or 'expired': the three states in
+     * which the customer can no longer pay. Anything else — paid, unreachable,
+     * unknown at Viva, or a response that does not say Success — throws, and
+     * the caller must leave the local order exactly as it is. Never called
+     * inside a database transaction.
+     *
+     * @throws VivaPaymentOrderCancellationException
+     */
+    public function cancelPaymentOrder(Order $order): string
+    {
+        $orderCode = (string) $order->viva_order_code;
+
+        if (! preg_match('/^\d{1,32}$/D', $orderCode)) {
+            throw $this->cancellationFailed($order, 'invalid_order_code');
+        }
+
+        if (! $this->reconciliationIsConfigured()) {
+            throw $this->cancellationFailed($order, 'unconfigured');
+        }
+
+        try {
+            $state = $this->retrievePaymentOrderState($order, $orderCode);
+
+            if ($state === self::PAYMENT_ORDER_PAID) {
+                throw $this->cancellationFailed($order, 'paid');
+            }
+
+            if ($state === self::PAYMENT_ORDER_CANCELED || $state === self::PAYMENT_ORDER_EXPIRED) {
+                $result = $state === self::PAYMENT_ORDER_CANCELED ? 'already_cancelled' : 'expired';
+
+                $this->logPaymentEvent('info', 'viva.payment_order_already_unpayable', [
+                    'order_id' => $order->getKey(),
+                    'viva_order_code' => $orderCode,
+                    'result' => $result,
+                ]);
+
+                return $result;
+            }
+
+            if ($state !== self::PAYMENT_ORDER_PENDING) {
+                throw $this->cancellationFailed($order, 'ambiguous', ['state' => $state]);
+            }
+
+            $response = $this->reconciliationApiClient()->delete('/api/orders/'.$orderCode);
+        } catch (VivaPaymentOrderCancellationException $e) {
+            throw $e;
+        } catch (ConnectionException $e) {
+            throw $this->cancellationFailed($order, 'unreachable', ['exception' => $e::class], $e);
+        } catch (Throwable $e) {
+            throw $this->cancellationFailed($order, 'error', ['exception' => $e::class], $e);
+        }
+
+        if ($reason = $this->httpFailureReason($response)) {
+            throw $this->cancellationFailed($order, $reason, ['http_status' => $response->status()]);
+        }
+
+        if ($response->json('Success') !== true || (int) $response->json('ErrorCode', -1) !== 0) {
+            throw $this->cancellationFailed($order, 'rejected', [
+                'error_code' => $response->json('ErrorCode'),
+                'event_id' => $response->json('EventId'),
+            ]);
+        }
+
+        $this->logPaymentEvent('info', 'viva.payment_order_cancelled', [
+            'order_id' => $order->getKey(),
+            'viva_order_code' => $orderCode,
+        ]);
+
+        return 'cancelled';
+    }
+
+    /**
+     * @throws VivaPaymentOrderCancellationException
+     */
+    private function retrievePaymentOrderState(Order $order, string $orderCode): int
+    {
+        $response = $this->reconciliationApiClient()->get('/api/orders/'.$orderCode);
+
+        if ($reason = $this->httpFailureReason($response)) {
+            throw $this->cancellationFailed($order, $reason, ['http_status' => $response->status()]);
+        }
+
+        $payload = $response->json();
+        $returnedOrderCode = (string) data_get($payload, 'OrderCode', '');
+        $state = data_get($payload, 'StateId');
+
+        if (! is_array($payload) || ! hash_equals($orderCode, $returnedOrderCode) || ! is_numeric($state)) {
+            throw $this->cancellationFailed($order, 'ambiguous');
+        }
+
+        return (int) $state;
+    }
+
+    private function httpFailureReason(Response $response): ?string
+    {
+        return match (true) {
+            $response->status() === 401 => 'unauthorized',
+            $response->status() === 404 => 'not_found',
+            $response->serverError() => 'provider_error',
+            ! $response->ok() => 'ambiguous',
+            default => null,
+        };
+    }
+
+    private function cancellationFailed(
+        Order $order,
+        string $reason,
+        array $context = [],
+        ?Throwable $previous = null,
+    ): VivaPaymentOrderCancellationException {
+        $this->logPaymentEvent($reason === 'paid' ? 'warning' : 'error', 'viva.payment_order_cancel_failed', [
+            'order_id' => $order->getKey(),
+            'viva_order_code' => (string) $order->viva_order_code,
+            'reason' => $reason,
+            ...$context,
+        ]);
+
+        return new VivaPaymentOrderCancellationException($reason, $previous);
     }
 
     private function confirmTransaction(

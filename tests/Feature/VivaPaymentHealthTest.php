@@ -94,6 +94,32 @@ class VivaPaymentHealthTest extends TestCase
         $this->assertSame(6, app(VivaPaymentHealth::class)->counts()['inconsistent']);
     }
 
+    public function test_a_paid_viva_order_that_was_cancelled_counts_as_an_inconsistency(): void
+    {
+        $this->vivaOrder([
+            'status' => OrderStatus::Cancelled->value,
+            'payment_status' => 'paid',
+            'viva_transaction_id' => (string) Str::uuid(),
+            'paid_at' => now(),
+        ]);
+        // Cancelled before any payment: nothing is owed to anyone.
+        $this->vivaOrder(['status' => OrderStatus::Cancelled->value]);
+        // Paid and delivered: the normal happy path.
+        $this->vivaOrder([
+            'status' => OrderStatus::Completed->value,
+            'payment_status' => 'paid',
+            'viva_transaction_id' => (string) Str::uuid(),
+            'paid_at' => now(),
+        ]);
+        Order::factory()->create([
+            'payment_method' => PaymentMethod::Cash->value,
+            'status' => OrderStatus::Cancelled->value,
+            'payment_status' => 'paid',
+        ]);
+
+        $this->assertSame(1, app(VivaPaymentHealth::class)->counts()['inconsistent']);
+    }
+
     public function test_the_widget_renders_healthy_zero_states_in_the_admin_dashboard(): void
     {
         $admin = User::factory()->admin()->create();

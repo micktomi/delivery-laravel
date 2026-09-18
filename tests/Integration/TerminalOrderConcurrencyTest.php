@@ -42,9 +42,20 @@ class TerminalOrderConcurrencyTest extends TestCase
             'password' => getenv('TERMINAL_TEST_DB_PASSWORD') ?: '',
             'charset' => 'utf8mb4', 'collation' => 'utf8mb4_unicode_ci', 'prefix' => '', 'strict' => true,
         ], 'cache.default' => 'array', 'session.driver' => 'array', 'logging.default' => 'null',
-            'printing.token' => 'test-token', 'services.viva.enabled' => true]);
+            'printing.token' => 'test-token', 'services.viva.enabled' => true,
+            'services.viva.reconciliation_merchant_id' => 'test-merchant-id',
+            'services.viva.reconciliation_api_key' => 'test-merchant-api-key']);
         Artisan::call('migrate:fresh', ['--database' => 'terminal_concurrency', '--force' => true]);
         Http::preventStrayRequests();
+        // Cancelling a pending Viva order that reached Smart Checkout now makes
+        // the payment order unpayable at Viva first. Only the cancelling worker
+        // reaches this; the worker racing it still sends nothing, which it
+        // asserts for itself.
+        Http::fake([
+            'https://demo.vivapayments.com/api/orders/*' => fn ($request) => $request->method() === 'DELETE'
+                ? Http::response(['OrderCode' => 7680701046572600, 'ErrorCode' => 0, 'EventId' => 0, 'Success' => true])
+                : Http::response(['OrderCode' => 7680701046572600, 'StateId' => 0]),
+        ]);
     }
 
     public static function endpoints(): array
