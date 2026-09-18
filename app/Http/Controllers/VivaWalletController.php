@@ -10,7 +10,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
@@ -32,25 +31,56 @@ class VivaWalletController extends Controller
         }
 
         try {
+            // The per-order lock serializes checkout creation/reuse. The Viva
+            // request itself stays outside any database transaction: on SQLite
+            // a DEFERRED transaction that has read the order holds a WAL
+            // snapshot that can no longer be upgraded to a write once any
+            // other request (a kitchen board poll saving its session) has
+            // committed, and on MySQL a row lock would be held for the whole
+            // HTTP round trip.
             return Cache::lock('viva:start:'.$order->getKey(), 20)->block(
                 5,
                 function () use ($order, $viva): RedirectResponse {
-                    // Serialize checkout creation/reuse with cancellation's order lock.
-                    return DB::transaction(function () use ($order, $viva): RedirectResponse {
-                        $fresh = Order::query()->whereKey($order->getKey())->lockForUpdate()->firstOrFail();
-                        abort_if(in_array($fresh->status, [OrderStatus::Cancelled, OrderStatus::Completed], true), 409);
+                    $fresh = Order::query()->whereKey($order->getKey())->firstOrFail();
+                    abort_if(in_array($fresh->status, [OrderStatus::Cancelled, OrderStatus::Completed], true), 409);
 
-                        if ($fresh->payment_status === 'paid') {
-                            return redirect()->route('order.track', $fresh);
-                        }
+                    if ($fresh->payment_status === 'paid') {
+                        return redirect()->route('order.track', $fresh);
+                    }
 
-                        if (blank($fresh->viva_order_code)) {
-                            $orderCode = $viva->createPaymentOrder($fresh);
-                            $fresh->forceFill(['viva_order_code' => $orderCode])->save();
-                        }
-
+                    if (filled($fresh->viva_order_code)) {
                         return redirect()->away($viva->checkoutUrl((string) $fresh->viva_order_code));
-                    });
+                    }
+
+                    $orderCode = $viva->createPaymentOrder($fresh);
+
+                    // A single conditional UPDATE is atomic on its own: the code
+                    // is stored only while the order is still open and has no
+                    // code, so a cancellation that landed during the Viva call
+                    // wins and the customer is never sent to pay for it.
+                    $stored = Order::query()
+                        ->whereKey($fresh->getKey())
+                        ->whereNull('viva_order_code')
+                        ->whereNotIn('status', [OrderStatus::Cancelled->value, OrderStatus::Completed->value])
+                        ->update(['viva_order_code' => $orderCode]);
+
+                    if ($stored === 1) {
+                        return redirect()->away($viva->checkoutUrl($orderCode));
+                    }
+
+                    $current = Order::query()->whereKey($fresh->getKey())->firstOrFail();
+
+                    if (filled($current->viva_order_code)) {
+                        return redirect()->away($viva->checkoutUrl((string) $current->viva_order_code));
+                    }
+
+                    $viva->logPaymentEvent('warning', 'viva.payment_order_not_stored', [
+                        'order_id' => $current->getKey(),
+                        'viva_order_code' => $orderCode,
+                        'status' => $current->status->value,
+                    ]);
+
+                    abort(409);
                 },
             );
         } catch (HttpExceptionInterface $e) {

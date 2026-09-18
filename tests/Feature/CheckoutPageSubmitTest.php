@@ -12,10 +12,13 @@ use App\Models\StoreSetting;
 use App\Services\CartService;
 use App\Services\PricingService;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Livewire\Livewire;
+use PDOException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\TestCase;
@@ -335,6 +338,52 @@ class CheckoutPageSubmitTest extends TestCase
 
         $component->assertDontSee('SQLSTATE');
         $component->assertDontSee('10.0.0.5');
+
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertFalse(app(CartService::class)->isEmpty());
+    }
+
+    /**
+     * S7: a database failure is logged with driver diagnostics only. Laravel's
+     * QueryException message embeds the SQL with its bindings, i.e. the
+     * customer's name, phone and address, so it must never reach the log.
+     */
+    public function test_database_failures_are_logged_without_customer_details(): void
+    {
+        $this->seedCart();
+
+        $this->swap(CreateOrder::class, new class(app(CartService::class), app(PricingService::class)) extends CreateOrder
+        {
+            public function execute(array $checkoutData): Order
+            {
+                $driverError = new PDOException('SQLSTATE[23000]: Integrity constraint violation: 19 NOT NULL constraint failed: orders.total');
+                $driverError->errorInfo = ['23000', 19, 'NOT NULL constraint failed: orders.total'];
+
+                throw new QueryException(
+                    'sqlite',
+                    'insert into "orders" ("customer_name", "phone", "address") values (?, ?, ?)',
+                    ['Μιχάλης', '6912345678', 'Δημοκρατίας 42'],
+                    $driverError,
+                );
+            }
+        });
+
+        Log::spy();
+
+        $this->fill()->call('submit')->assertHasErrors(['checkout']);
+
+        Log::shouldHaveReceived('error')->once()->withArgs(function (string $event, array $context): bool {
+            $serialized = json_encode($context, JSON_UNESCAPED_UNICODE);
+
+            return $event === 'checkout.failed'
+                && ($context['exception'] ?? null) === QueryException::class
+                && ($context['sqlstate'] ?? null) === '23000'
+                && ($context['driver_code'] ?? null) === 19
+                && ! array_key_exists('message', $context)
+                && ! str_contains($serialized, '6912345678')
+                && ! str_contains($serialized, 'Μιχάλης')
+                && ! str_contains($serialized, 'Δημοκρατίας');
+        });
 
         $this->assertDatabaseCount('orders', 0);
         $this->assertFalse(app(CartService::class)->isEmpty());

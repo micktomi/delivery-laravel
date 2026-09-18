@@ -450,6 +450,34 @@ class VivaWalletScaffoldTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_start_does_not_store_a_code_for_an_order_cancelled_during_the_viva_call(): void
+    {
+        $this->configureViva(true);
+        $order = $this->vivaOrder(['viva_order_code' => null]);
+
+        Http::fake([
+            'https://demo-accounts.vivapayments.com/connect/token' => Http::response([
+                'access_token' => 'test-access-token',
+                'expires_in' => 3600,
+            ]),
+            'https://demo-api.vivapayments.com/checkout/v2/orders' => function () use ($order) {
+                // The admin cancels while Viva is still answering.
+                app(CancelOrder::class)->execute($order);
+
+                return Http::response(['orderCode' => '7680701046572600']);
+            },
+        ]);
+
+        $this->withSession([self::SESSION_ORDER_KEY => $order->getRouteKey()])
+            ->get(route('viva.start', $order))
+            ->assertConflict();
+
+        $order->refresh();
+        $this->assertSame(OrderStatus::Cancelled, $order->status);
+        $this->assertNull($order->viva_order_code);
+        $this->assertSame('pending', $order->payment_status);
+    }
+
     public function test_start_rechecks_payment_and_reuses_only_nonterminal_pending_checkout(): void
     {
         $this->configureViva(true);

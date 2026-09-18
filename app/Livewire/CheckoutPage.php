@@ -6,6 +6,7 @@ use App\Actions\CreateOrder;
 use App\Enums\PaymentMethod;
 use App\Services\CartService;
 use App\Support\StoreSchedule;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
@@ -138,10 +139,13 @@ class CheckoutPage extends Component
             // Cart / catalogue problems are written for the customer to read.
             throw $e;
         } catch (Throwable $e) {
-            // Never surface an exception to the customer, never log their details.
+            // Never surface an exception to the customer, never log their
+            // details: a QueryException message embeds the SQL with its
+            // bindings, i.e. the name, phone and address just typed in. Only
+            // driver diagnostics are kept.
             Log::error('checkout.failed', [
                 'exception' => $e::class,
-                'message' => $e->getMessage(),
+                ...$this->safeExceptionDiagnostics($e),
                 'cart_lines' => count(app(CartService::class)->items()),
             ]);
 
@@ -179,6 +183,24 @@ class CheckoutPage extends Component
     public function removeCoupon(): void
     {
         app(CartService::class)->removeCoupon();
+    }
+
+    /**
+     * SQLSTATE and driver error code identify a database failure without the
+     * statement or its bindings; every other exception is named by class only.
+     *
+     * @return array{sqlstate?: ?string, driver_code?: int|string|null}
+     */
+    private function safeExceptionDiagnostics(Throwable $e): array
+    {
+        if (! $e instanceof QueryException) {
+            return [];
+        }
+
+        return [
+            'sqlstate' => isset($e->errorInfo[0]) ? (string) $e->errorInfo[0] : null,
+            'driver_code' => $e->errorInfo[1] ?? null,
+        ];
     }
 
     /**
