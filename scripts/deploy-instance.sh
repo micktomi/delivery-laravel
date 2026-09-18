@@ -109,6 +109,7 @@ mkdir -p "$RELEASE_DIR"
 chmod 755 "$RELEASE_DIR"
 CANDIDATE_CREATED=1
 tar -xzf "$ARTIFACT" -C "$RELEASE_DIR"
+chmod 755 "$RELEASE_DIR"
 require_file "$RELEASE_DIR/artisan" "extracted release is missing artisan — bad artifact"
 
 log "linking instance-owned shared paths into the candidate release"
