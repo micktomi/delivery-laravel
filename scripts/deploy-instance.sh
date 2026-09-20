@@ -136,6 +136,7 @@ if [[ "$DB_CONNECTION" == "sqlite" ]]; then
         BACKUP_FILE="$BACKUP_DIR/pre-deploy-${BACKUP_STAMP}-${RELEASE_ID}.sqlite"
         log "backing up SQLite database to $BACKUP_FILE"
         sqlite_backup "$DB_DATABASE" "$BACKUP_FILE"
+        chmod 600 "$BACKUP_FILE"
     else
         log "DB_CONNECTION=sqlite but DB_DATABASE ($DB_DATABASE) does not exist yet — first deploy, nothing to back up"
     fi
@@ -149,6 +150,7 @@ elif [[ "$DB_CONNECTION" == "mysql" ]]; then
             -h "${DB_HOST:-127.0.0.1}" -P "${DB_PORT:-3306}" -u "$DB_USERNAME" "$DB_DATABASE" \
             | gzip > "$BACKUP_FILE"
         [[ -s "$BACKUP_FILE" ]] || die "mysqldump produced an empty backup: $BACKUP_FILE"
+        chmod 600 "$BACKUP_FILE"
     else
         die "DB_CONNECTION=mysql but mysqldump is not installed — refusing to migrate without a pre-deploy backup"
     fi
