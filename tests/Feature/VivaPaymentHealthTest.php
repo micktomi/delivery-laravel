@@ -7,6 +7,7 @@ use App\Enums\PaymentMethod;
 use App\Filament\Widgets\VivaPaymentHealthWidget;
 use App\Models\Order;
 use App\Models\User;
+use App\Services\VivaWalletService;
 use App\Support\VivaPaymentHealth;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -115,6 +116,16 @@ class VivaPaymentHealthTest extends TestCase
             'payment_method' => PaymentMethod::Cash->value,
             'status' => OrderStatus::Cancelled->value,
             'payment_status' => 'paid',
+        ]);
+
+        $this->assertSame(1, app(VivaPaymentHealth::class)->counts()['inconsistent']);
+    }
+
+    public function test_an_ambiguous_payment_order_outcome_counts_as_an_inconsistency(): void
+    {
+        $this->vivaOrder([
+            'payment_status' => VivaWalletService::PAYMENT_ORDER_OUTCOME_UNKNOWN,
+            'viva_order_code' => null,
         ]);
 
         $this->assertSame(1, app(VivaPaymentHealth::class)->counts()['inconsistent']);

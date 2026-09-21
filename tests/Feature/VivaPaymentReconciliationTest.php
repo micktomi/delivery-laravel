@@ -78,9 +78,10 @@ class VivaPaymentReconciliationTest extends TestCase
         $transactionId = (string) Str::uuid();
         $this->fakeReconciliation($order, $transactionId, ['amount' => 6.00]);
 
-        $this->expectPaymentLog('viva.transaction_amount_mismatch', function (array $context) use ($order, $transactionId): bool {
+        $this->expectPaymentLog('viva.transaction_amount_mismatch', function (array $context) use ($order): bool {
             return $context['order_id'] === $order->id
-                && $context['transaction_id'] === $transactionId
+                && ! array_key_exists('transaction_id', $context)
+                && ! array_key_exists('viva_order_code', $context)
                 && $context['paid_cents'] === 600
                 && $context['expected_cents'] === 500;
         });
@@ -96,8 +97,9 @@ class VivaPaymentReconciliationTest extends TestCase
         $transactionId = (string) Str::uuid();
         $this->fakeReconciliation($order, $transactionId, ['currencyCode' => '840']);
 
-        $this->expectPaymentLog('viva.transaction_not_payable', function (array $context) use ($transactionId): bool {
-            return $context['transaction_id'] === $transactionId
+        $this->expectPaymentLog('viva.transaction_not_payable', function (array $context): bool {
+            return ! array_key_exists('transaction_id', $context)
+                && ! array_key_exists('viva_order_code', $context)
                 && $context['currency'] === '840';
         });
 

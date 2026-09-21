@@ -215,7 +215,8 @@ class VivaWalletScaffoldTest extends TestCase
             ->once()
             ->with('info', 'viva.payment_confirmed', Mockery::on(
                 fn (array $context): bool => $context['order_id'] === $order->getKey()
-                    && $context['transaction_id'] === $transactionId,
+                    && ! array_key_exists('transaction_id', $context)
+                    && ! array_key_exists('viva_order_code', $context),
             ));
         Log::shouldReceive('channel')->once()->with('payments')->andReturn($paymentLogger);
 
@@ -242,8 +243,8 @@ class VivaWalletScaffoldTest extends TestCase
             ->once()
             ->with('critical', 'viva.payment_received_after_cancellation', Mockery::on(
                 fn (array $context): bool => $context['order_id'] === $order->getKey()
-                    && $context['viva_order_code'] === $order->viva_order_code
-                    && $context['transaction_id'] === $transactionId
+                    && ! array_key_exists('viva_order_code', $context)
+                    && ! array_key_exists('transaction_id', $context)
                     && $context['action_required'] === 'refund_or_manual_review',
             ));
         Log::shouldReceive('channel')->once()->with('payments')->andReturn($paymentLogger);
@@ -278,7 +279,8 @@ class VivaWalletScaffoldTest extends TestCase
             ->once()
             ->with('info', 'viva.webhook_duplicate', Mockery::on(
                 fn (array $context): bool => $context['order_id'] === $order->getKey()
-                    && $context['transaction_id'] === $transactionId,
+                    && ! array_key_exists('transaction_id', $context)
+                    && ! array_key_exists('viva_order_code', $context),
             ));
         Log::shouldReceive('channel')->twice()->with('payments')->andReturn($paymentLogger);
 

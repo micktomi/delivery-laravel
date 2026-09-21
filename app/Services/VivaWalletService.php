@@ -4,8 +4,15 @@ namespace App\Services;
 
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
+use App\Exceptions\VivaApiException;
+use App\Exceptions\VivaConfigurationException;
+use App\Exceptions\VivaException;
 use App\Exceptions\VivaPaymentOrderCancellationException;
+use App\Exceptions\VivaResponseException;
+use App\Exceptions\VivaTransportException;
 use App\Models\Order;
+use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -14,14 +21,17 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use RuntimeException;
 use Throwable;
 
 class VivaWalletService
 {
+    public const PAYMENT_ORDER_OUTCOME_UNKNOWN = 'payment_order_unknown';
+
     private const PAYMENT_CREATED_EVENT = 1796;
 
     private const EURO_CURRENCY_CODE = '978';
+
+    private const HTTP_TIMEOUT_SECONDS = 10;
 
     /** Payment order StateId values of the Retrieve order API. */
     private const PAYMENT_ORDER_PENDING = 0;
@@ -35,37 +45,43 @@ class VivaWalletService
     public function createPaymentOrder(Order $order): string
     {
         if (! (bool) config('services.viva.enabled')) {
-            throw new RuntimeException('Viva payments are disabled.');
+            throw new VivaConfigurationException('Viva payments are disabled.');
         }
 
         $amount = $this->orderTotalInCents($order);
 
         if ($amount < 30) {
-            throw new RuntimeException('The order total is below the Viva minimum amount.');
+            throw new VivaException('The order total is below the Viva minimum amount.');
         }
 
-        $response = $this->apiClient()->post('/checkout/v2/orders', [
-            'amount' => $amount,
-            'sourceCode' => $this->configuredValue('source_code'),
-            'customerTrns' => 'Παραγγελία #'.$order->display_number,
-            'merchantTrns' => 'Delivery order '.$order->getKey(),
-            'customer' => [
-                'fullName' => Str::limit($order->customer_name, 100, ''),
-                'phone' => $order->phone,
-                'countryCode' => 'GR',
-                'requestLang' => 'el-GR',
-            ],
-        ])->throw();
+        $endpoint = '/checkout/v2/orders';
+        $response = $this->sendRequest(
+            fn (): Response => $this->apiClient()->post($endpoint, [
+                'amount' => $amount,
+                'sourceCode' => $this->configuredValue('source_code'),
+                'customerTrns' => 'Παραγγελία #'.$order->display_number,
+                'merchantTrns' => 'Delivery order '.$order->getKey(),
+                'customer' => [
+                    'fullName' => Str::limit($order->customer_name, 100, ''),
+                    'phone' => $order->phone,
+                    'countryCode' => 'GR',
+                    'requestLang' => 'el-GR',
+                ],
+            ]),
+            $endpoint,
+        );
+        $payload = $this->jsonObject(
+            $this->throwOnFailure($response, $endpoint, forgetAccessTokenOnUnauthorized: true),
+            $endpoint,
+        );
+        $orderCode = $this->stringField($payload, 'orderCode');
 
-        $orderCode = (string) $response->json('orderCode', '');
-
-        if (! preg_match('/^\d{1,32}$/D', $orderCode)) {
-            throw new RuntimeException('Viva returned an invalid payment order code.');
+        if (! $this->isOrderCode($orderCode)) {
+            throw new VivaResponseException('Viva returned an invalid payment order code.');
         }
 
         $this->logPaymentEvent('info', 'viva.payment_order_created', [
             'order_id' => $order->getKey(),
-            'viva_order_code' => $orderCode,
             'amount_cents' => $amount,
             'environment' => $this->isDemo() ? 'demo' : 'production',
         ]);
@@ -75,8 +91,8 @@ class VivaWalletService
 
     public function checkoutUrl(string $orderCode): string
     {
-        if (! preg_match('/^\d{1,32}$/D', $orderCode)) {
-            throw new RuntimeException('Invalid Viva payment order code.');
+        if (! $this->isOrderCode($orderCode)) {
+            throw new VivaException('Invalid Viva payment order code.');
         }
 
         $host = $this->isDemo()
@@ -92,15 +108,28 @@ class VivaWalletService
      */
     public function processWebhook(array $payload): string
     {
-        if ((int) data_get($payload, 'EventTypeId', 0) !== self::PAYMENT_CREATED_EVENT) {
+        $eventTypeId = $payload['EventTypeId'] ?? null;
+        if ($eventTypeId !== self::PAYMENT_CREATED_EVENT && $eventTypeId !== (string) self::PAYMENT_CREATED_EVENT) {
             return 'ignored';
         }
 
-        $transactionId = strtolower((string) data_get($payload, 'EventData.TransactionId', ''));
-        $reportedOrderCode = (string) data_get($payload, 'EventData.OrderCode', '');
+        $eventData = $payload['EventData'] ?? null;
+        if (! is_array($eventData)) {
+            return 'ignored';
+        }
+
+        $transactionId = $eventData['TransactionId'] ?? null;
+        $reportedOrderCode = $eventData['OrderCode'] ?? null;
+
+        if (! is_string($transactionId) || (! is_string($reportedOrderCode) && ! is_int($reportedOrderCode))) {
+            return 'ignored';
+        }
+
+        $transactionId = strtolower(trim($transactionId));
+        $reportedOrderCode = trim((string) $reportedOrderCode);
 
         if (! Str::isUuid($transactionId)
-            || ! preg_match('/^\d{1,32}$/D', $reportedOrderCode)
+            || ! $this->isOrderCode($reportedOrderCode)
             || ! Order::query()
                 ->where('viva_order_code', $reportedOrderCode)
                 ->where('payment_method', PaymentMethod::Viva->value)
@@ -112,7 +141,7 @@ class VivaWalletService
         $retrievedOrderCode = (string) data_get($transaction, 'orderCode', '');
 
         if (! hash_equals($retrievedOrderCode, $reportedOrderCode)) {
-            $this->logPaymentEvent('warning', 'viva.webhook_order_mismatch', ['transaction_id' => $transactionId]);
+            $this->logPaymentEvent('warning', 'viva.webhook_order_mismatch');
 
             return 'ignored';
         }
@@ -123,19 +152,17 @@ class VivaWalletService
     public function retrieveTransaction(string $transactionId): array
     {
         if (! Str::isUuid($transactionId)) {
-            throw new RuntimeException('Invalid Viva transaction ID.');
+            throw new VivaException('Invalid Viva transaction ID.');
         }
 
-        $transaction = $this->apiClient()
-            ->get('/checkout/v2/transactions/'.$transactionId)
-            ->throw()
-            ->json();
+        $requestPath = '/checkout/v2/transactions/'.$transactionId;
+        $endpoint = '/checkout/v2/transactions/{transactionId}';
+        $response = $this->sendRequest(fn (): Response => $this->apiClient()->get($requestPath), $endpoint);
 
-        if (! is_array($transaction)) {
-            throw new RuntimeException('Viva returned an invalid transaction response.');
-        }
-
-        return $transaction;
+        return $this->jsonObject(
+            $this->throwOnFailure($response, $endpoint, forgetAccessTokenOnUnauthorized: true),
+            $endpoint,
+        );
     }
 
     /**
@@ -162,7 +189,6 @@ class VivaWalletService
             if (! hash_equals($orderCode, $retrievedOrderCode)) {
                 $this->logPaymentEvent('warning', 'viva.reconciliation_order_mismatch', [
                     'order_id' => $order->getKey(),
-                    'transaction_id' => $transactionId,
                 ]);
                 $result = 'ignored';
 
@@ -207,7 +233,7 @@ class VivaWalletService
     {
         $orderCode = (string) $order->viva_order_code;
 
-        if (! preg_match('/^\d{1,32}$/D', $orderCode)) {
+        if (! $this->isOrderCode($orderCode)) {
             throw $this->cancellationFailed($order, 'invalid_order_code');
         }
 
@@ -227,7 +253,6 @@ class VivaWalletService
 
                 $this->logPaymentEvent('info', 'viva.payment_order_already_unpayable', [
                     'order_id' => $order->getKey(),
-                    'viva_order_code' => $orderCode,
                     'result' => $result,
                 ]);
 
@@ -242,9 +267,9 @@ class VivaWalletService
         } catch (VivaPaymentOrderCancellationException $e) {
             throw $e;
         } catch (ConnectionException $e) {
-            throw $this->cancellationFailed($order, 'unreachable', ['exception' => $e::class], $e);
+            throw $this->cancellationFailed($order, 'unreachable', ['exception' => $e::class]);
         } catch (Throwable $e) {
-            throw $this->cancellationFailed($order, 'error', ['exception' => $e::class], $e);
+            throw $this->cancellationFailed($order, 'error', ['exception' => $e::class]);
         }
 
         if ($reason = $this->httpFailureReason($response)) {
@@ -260,7 +285,6 @@ class VivaWalletService
 
         $this->logPaymentEvent('info', 'viva.payment_order_cancelled', [
             'order_id' => $order->getKey(),
-            'viva_order_code' => $orderCode,
         ]);
 
         return 'cancelled';
@@ -303,16 +327,14 @@ class VivaWalletService
         Order $order,
         string $reason,
         array $context = [],
-        ?Throwable $previous = null,
     ): VivaPaymentOrderCancellationException {
         $this->logPaymentEvent($reason === 'paid' ? 'warning' : 'error', 'viva.payment_order_cancel_failed', [
             'order_id' => $order->getKey(),
-            'viva_order_code' => (string) $order->viva_order_code,
             'reason' => $reason,
             ...$context,
         ]);
 
-        return new VivaPaymentOrderCancellationException($reason, $previous);
+        return new VivaPaymentOrderCancellationException($reason);
     }
 
     private function confirmTransaction(
@@ -325,12 +347,11 @@ class VivaWalletService
         $currency = (string) data_get($transaction, 'currencyCode', '');
         $paidCents = $this->amountInCents(data_get($transaction, 'amount'));
 
-        if (! preg_match('/^\d{1,32}$/D', $orderCode)
+        if (! $this->isOrderCode($orderCode)
             || $status !== 'F'
             || $currency !== self::EURO_CURRENCY_CODE
             || $paidCents === null) {
             $this->logPaymentEvent('warning', 'viva.transaction_not_payable', [
-                'transaction_id' => $transactionId,
                 'status' => $status,
                 'currency' => $currency,
             ]);
@@ -345,7 +366,7 @@ class VivaWalletService
                 ->first();
 
             if (! $order || $order->payment_method !== PaymentMethod::Viva) {
-                $this->logPaymentEvent('warning', 'viva.transaction_order_not_found', ['transaction_id' => $transactionId]);
+                $this->logPaymentEvent('warning', 'viva.transaction_order_not_found');
 
                 return 'ignored';
             }
@@ -353,7 +374,6 @@ class VivaWalletService
             if ($skipCompletedOrders && $order->status === OrderStatus::Completed) {
                 $this->logPaymentEvent('warning', 'viva.reconciliation_terminal_order_skipped', [
                     'order_id' => $order->getKey(),
-                    'transaction_id' => $transactionId,
                     'status' => $order->status->value,
                 ]);
 
@@ -363,7 +383,6 @@ class VivaWalletService
             if ($paidCents !== $this->orderTotalInCents($order)) {
                 $this->logPaymentEvent('warning', 'viva.transaction_amount_mismatch', [
                     'order_id' => $order->getKey(),
-                    'transaction_id' => $transactionId,
                     'paid_cents' => $paidCents,
                     'expected_cents' => $this->orderTotalInCents($order),
                 ]);
@@ -375,7 +394,6 @@ class VivaWalletService
                 if (hash_equals((string) $order->viva_transaction_id, $transactionId)) {
                     $this->logPaymentEvent('info', 'viva.webhook_duplicate', [
                         'order_id' => $order->getKey(),
-                        'transaction_id' => $transactionId,
                     ]);
 
                     return 'duplicate';
@@ -383,7 +401,6 @@ class VivaWalletService
 
                 $this->logPaymentEvent('warning', 'viva.paid_order_transaction_mismatch', [
                     'order_id' => $order->getKey(),
-                    'transaction_id' => $transactionId,
                 ]);
 
                 return 'ignored';
@@ -395,7 +412,7 @@ class VivaWalletService
                 ->exists();
 
             if ($transactionAlreadyUsed) {
-                $this->logPaymentEvent('warning', 'viva.transaction_already_used', ['transaction_id' => $transactionId]);
+                $this->logPaymentEvent('warning', 'viva.transaction_already_used');
 
                 return 'ignored';
             }
@@ -409,8 +426,6 @@ class VivaWalletService
             if ($order->status === OrderStatus::Cancelled) {
                 $this->logPaymentEvent('critical', 'viva.payment_received_after_cancellation', [
                     'order_id' => $order->getKey(),
-                    'viva_order_code' => $orderCode,
-                    'transaction_id' => $transactionId,
                     'action_required' => 'refund_or_manual_review',
                 ]);
 
@@ -419,7 +434,6 @@ class VivaWalletService
 
             $this->logPaymentEvent('info', 'viva.payment_confirmed', [
                 'order_id' => $order->getKey(),
-                'transaction_id' => $transactionId,
             ]);
 
             return 'paid';
@@ -437,7 +451,7 @@ class VivaWalletService
     /** @return list<string> */
     private function retrieveOrderTransactionIds(string $orderCode, int|string $localOrderId): array
     {
-        if (! preg_match('/^\d{1,32}$/D', $orderCode)) {
+        if (! $this->isOrderCode($orderCode)) {
             $this->logPaymentEvent('warning', 'viva.reconciliation_invalid_order_code', [
                 'order_id' => $localOrderId,
             ]);
@@ -445,23 +459,36 @@ class VivaWalletService
             return [];
         }
 
-        $response = $this->reconciliationApiClient()
-            ->get('/api/transactions/', ['ordercode' => $orderCode])
-            ->throw()
-            ->json();
+        $endpoint = '/api/transactions';
+        $response = $this->sendRequest(
+            fn (): Response => $this->reconciliationApiClient()->get('/api/transactions/', ['ordercode' => $orderCode]),
+            $endpoint,
+        );
+        $response = $this->jsonObject($this->throwOnFailure($response, $endpoint), $endpoint);
 
         if (! is_array($response)
             || ($response['Success'] ?? null) !== true
             || ($response['ErrorCode'] ?? null) !== 0
             || ! is_array($response['Transactions'] ?? null)
             || ! array_is_list($response['Transactions'])) {
-            throw new RuntimeException('Viva returned an unsuccessful or invalid transaction search response.');
+            throw new VivaResponseException('Viva returned an unsuccessful or invalid transaction search response.');
         }
 
         $transactionIds = [];
         foreach ($response['Transactions'] as $transaction) {
-            $returnedOrderCode = (string) data_get($transaction, 'Order.OrderCode', '');
-            $transactionId = strtolower((string) data_get($transaction, 'TransactionId', ''));
+            $returnedOrderCode = data_get($transaction, 'Order.OrderCode');
+            $transactionId = data_get($transaction, 'TransactionId');
+
+            if ((! is_string($returnedOrderCode) && ! is_int($returnedOrderCode)) || ! is_string($transactionId)) {
+                $this->logPaymentEvent('warning', 'viva.reconciliation_invalid_search_result', [
+                    'order_id' => $localOrderId,
+                ]);
+
+                continue;
+            }
+
+            $returnedOrderCode = trim((string) $returnedOrderCode);
+            $transactionId = strtolower(trim($transactionId));
 
             if (! hash_equals($orderCode, $returnedOrderCode) || ! Str::isUuid($transactionId)) {
                 $this->logPaymentEvent('warning', 'viva.reconciliation_invalid_search_result', [
@@ -483,6 +510,8 @@ class VivaWalletService
      */
     public function logPaymentEvent(string $level, string $event, array $context = []): void
     {
+        unset($context['viva_order_code'], $context['transaction_id']);
+
         try {
             Log::channel('payments')->log($level, $event, $context);
         } catch (Throwable $e) {
@@ -503,7 +532,7 @@ class VivaWalletService
             ->acceptJson()
             ->asJson()
             ->withToken($this->accessToken())
-            ->timeout(10);
+            ->timeout(self::HTTP_TIMEOUT_SECONDS);
     }
 
     private function reconciliationApiClient(): PendingRequest
@@ -514,7 +543,7 @@ class VivaWalletService
                 $this->configuredValue('reconciliation_merchant_id'),
                 $this->configuredValue('reconciliation_api_key'),
             )
-            ->timeout(10);
+            ->timeout(self::HTTP_TIMEOUT_SECONDS);
     }
 
     private function accessToken(): string
@@ -527,27 +556,125 @@ class VivaWalletService
             return $cached;
         }
 
-        $response = Http::asForm()
-            ->acceptJson()
-            ->withBasicAuth($clientId, $this->configuredValue('client_secret'))
-            ->timeout(10)
-            ->post($this->accountsBaseUrl().'/connect/token', [
-                'grant_type' => 'client_credentials',
-            ])
-            ->throw();
-
-        $token = (string) $response->json('access_token', '');
-        $expiresIn = (int) $response->json('expires_in', 0);
-
-        if ($token === '') {
-            throw new RuntimeException('Viva returned an invalid OAuth response.');
+        $store = Cache::getStore();
+        if (! $store instanceof LockProvider) {
+            throw new VivaConfigurationException('Viva OAuth token caching requires a cache store with atomic lock support.');
         }
 
-        if ($expiresIn > 60) {
-            Cache::put($cacheKey, $token, $expiresIn - 60);
+        $endpoint = '/connect/token';
+        $lockTimeout = self::HTTP_TIMEOUT_SECONDS + 5;
+
+        try {
+            return $store->lock($cacheKey.'.refresh-lock', $lockTimeout)->block(
+                $lockTimeout,
+                function () use ($cacheKey, $clientId, $endpoint): string {
+                    $cached = Cache::get($cacheKey);
+
+                    if (is_string($cached) && $cached !== '') {
+                        return $cached;
+                    }
+
+                    return $this->requestAccessToken($clientId, $cacheKey, $endpoint);
+                },
+            );
+        } catch (LockTimeoutException) {
+            $cached = Cache::get($cacheKey);
+
+            if (is_string($cached) && $cached !== '') {
+                return $cached;
+            }
+
+            throw new VivaTransportException('Viva OAuth token refresh timed out.', $endpoint);
+        }
+    }
+
+    private function requestAccessToken(string $clientId, string $cacheKey, string $endpoint): string
+    {
+        $response = $this->sendRequest(
+            fn (): Response => Http::asForm()
+                ->acceptJson()
+                ->withBasicAuth($clientId, $this->configuredValue('client_secret'))
+                ->timeout(self::HTTP_TIMEOUT_SECONDS)
+                ->post($this->accountsBaseUrl().$endpoint, ['grant_type' => 'client_credentials']),
+            $endpoint,
+        );
+        $payload = $this->jsonObject($this->throwOnFailure($response, $endpoint), $endpoint);
+        $token = $payload['access_token'] ?? null;
+        $expiresIn = $payload['expires_in'] ?? null;
+
+        if (! is_string($token)
+            || trim($token) === ''
+            || (! is_int($expiresIn) && ! (is_string($expiresIn) && preg_match('/^\d+$/D', $expiresIn) === 1))
+            || (int) $expiresIn < 1) {
+            throw new VivaResponseException('Viva returned an invalid OAuth response.');
+        }
+
+        $token = trim($token);
+        $ttl = (int) $expiresIn - 60;
+
+        if ($ttl > 0) {
+            Cache::put($cacheKey, $token, $ttl);
         }
 
         return $token;
+    }
+
+    /** @param callable(): Response $request */
+    private function sendRequest(callable $request, string $endpoint): Response
+    {
+        try {
+            return $request();
+        } catch (ConnectionException) {
+            throw new VivaTransportException('Viva API request could not connect.', $endpoint);
+        }
+    }
+
+    private function throwOnFailure(
+        Response $response,
+        string $endpoint,
+        bool $forgetAccessTokenOnUnauthorized = false,
+    ): Response {
+        if ($response->successful()) {
+            return $response;
+        }
+
+        $status = $response->status();
+
+        if ($forgetAccessTokenOnUnauthorized && $status === 401) {
+            $this->forgetAccessToken();
+        }
+
+        throw new VivaApiException('Viva API request failed with HTTP status '.$status.'.', $endpoint, $status);
+    }
+
+    private function forgetAccessToken(): void
+    {
+        $clientId = $this->configuredValue('client_id');
+        Cache::forget('viva.oauth.'.hash('sha256', ($this->isDemo() ? 'demo:' : 'production:').$clientId));
+    }
+
+    /** @return array<string, mixed> */
+    private function jsonObject(Response $response, string $endpoint): array
+    {
+        $payload = $response->json();
+
+        if (! is_array($payload) || array_is_list($payload)) {
+            throw new VivaResponseException('Viva returned an invalid JSON response from '.$endpoint.'.');
+        }
+
+        return $payload;
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function stringField(array $payload, string $key): string
+    {
+        $value = $payload[$key] ?? null;
+
+        if (! is_string($value) && ! is_int($value)) {
+            throw new VivaResponseException('Viva returned an invalid response field.');
+        }
+
+        return trim((string) $value);
     }
 
     private function configuredValue(string $key): string
@@ -555,7 +682,7 @@ class VivaWalletService
         $value = trim((string) config('services.viva.'.$key));
 
         if ($value === '') {
-            throw new RuntimeException('Viva configuration is incomplete.');
+            throw new VivaConfigurationException('Viva configuration is incomplete.');
         }
 
         return $value;
@@ -566,7 +693,7 @@ class VivaWalletService
         $environment = strtolower((string) config('services.viva.environment', 'demo'));
 
         if (! in_array($environment, ['demo', 'production', 'live'], true)) {
-            throw new RuntimeException('Invalid Viva environment.');
+            throw new VivaConfigurationException('Invalid Viva environment.');
         }
 
         return $environment === 'demo';
@@ -607,5 +734,10 @@ class VivaWalletService
         $cents = (int) round((float) $amount * 100, 0, PHP_ROUND_HALF_UP);
 
         return $cents >= 0 ? $cents : null;
+    }
+
+    private function isOrderCode(string $orderCode): bool
+    {
+        return preg_match('/^\d{16}$/D', $orderCode) === 1;
     }
 }
