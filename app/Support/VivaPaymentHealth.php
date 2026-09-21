@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Models\Order;
+use App\Services\VivaWalletService;
 use Illuminate\Database\Eloquent\Builder;
 
 final class VivaPaymentHealth
@@ -43,7 +44,8 @@ final class VivaPaymentHealth
                         ->orWhere(function (Builder $query): void {
                             $query->where('payment_status', 'paid')
                                 ->where('status', OrderStatus::Cancelled->value);
-                        });
+                        })
+                        ->orWhere('payment_status', VivaWalletService::PAYMENT_ORDER_OUTCOME_UNKNOWN);
                 })
                 ->count(),
         ];

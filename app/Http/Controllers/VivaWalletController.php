@@ -4,19 +4,21 @@ namespace App\Http\Controllers;
 
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
+use App\Exceptions\VivaTransportException;
 use App\Models\Order;
 use App\Services\VivaWalletService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
 class VivaWalletController extends Controller
 {
     private const LATEST_PUBLIC_ORDER_SESSION_KEY = 'latest_public_order_route_key';
+
+    private const PAYMENT_START_LOCK_SECONDS = 45;
 
     public function start(Order $order, VivaWalletService $viva): RedirectResponse
     {
@@ -30,6 +32,10 @@ class VivaWalletController extends Controller
             return redirect()->route('order.track', $order);
         }
 
+        if ($order->payment_status === VivaWalletService::PAYMENT_ORDER_OUTCOME_UNKNOWN) {
+            return $this->unknownPaymentOrderRedirect($order);
+        }
+
         try {
             // The per-order lock serializes checkout creation/reuse. The Viva
             // request itself stays outside any database transaction: on SQLite
@@ -38,7 +44,7 @@ class VivaWalletController extends Controller
             // other request (a kitchen board poll saving its session) has
             // committed, and on MySQL a row lock would be held for the whole
             // HTTP round trip.
-            return Cache::lock('viva:start:'.$order->getKey(), 20)->block(
+            return Cache::lock('viva:start:'.$order->getKey(), self::PAYMENT_START_LOCK_SECONDS)->block(
                 5,
                 function () use ($order, $viva): RedirectResponse {
                     $fresh = Order::query()->whereKey($order->getKey())->firstOrFail();
@@ -48,11 +54,65 @@ class VivaWalletController extends Controller
                         return redirect()->route('order.track', $fresh);
                     }
 
+                    if ($fresh->payment_status === VivaWalletService::PAYMENT_ORDER_OUTCOME_UNKNOWN) {
+                        return $this->unknownPaymentOrderRedirect($fresh);
+                    }
+
                     if (filled($fresh->viva_order_code)) {
                         return redirect()->away($viva->checkoutUrl((string) $fresh->viva_order_code));
                     }
 
-                    $orderCode = $viva->createPaymentOrder($fresh);
+                    try {
+                        $orderCode = $viva->createPaymentOrder($fresh);
+                    } catch (VivaTransportException $e) {
+                        // A token request that never connected happened before
+                        // the create-order request, so it retains the normal
+                        // retryable failure behaviour. Once the create request
+                        // itself has been attempted, however, a missing response
+                        // cannot tell us whether Viva created the payment order.
+                        if ($e->endpoint !== '/checkout/v2/orders') {
+                            throw $e;
+                        }
+
+                        $markedUnknown = Order::query()
+                            ->whereKey($fresh->getKey())
+                            ->where('payment_status', 'pending')
+                            ->whereNull('viva_order_code')
+                            // A cancellation may have committed while Viva's
+                            // response was being lost. Preserve the unknown
+                            // outcome on that cancelled order so reconciliation
+                            // can still detect money that moved too late.
+                            ->where('status', '!=', OrderStatus::Completed->value)
+                            ->update(['payment_status' => VivaWalletService::PAYMENT_ORDER_OUTCOME_UNKNOWN]);
+
+                        if ($markedUnknown === 1) {
+                            $fresh->payment_status = VivaWalletService::PAYMENT_ORDER_OUTCOME_UNKNOWN;
+                            $viva->logPaymentEvent('warning', 'viva.payment_order_outcome_unknown', [
+                                'order_id' => $fresh->getKey(),
+                            ]);
+
+                            return $this->unknownPaymentOrderRedirect($fresh);
+                        }
+
+                        // Another state transition may have won while the HTTP
+                        // request was in flight. Honour that durable truth and
+                        // never overwrite it with the ambiguous state.
+                        $current = Order::query()->whereKey($fresh->getKey())->firstOrFail();
+
+                        if ($current->payment_status === VivaWalletService::PAYMENT_ORDER_OUTCOME_UNKNOWN) {
+                            return $this->unknownPaymentOrderRedirect($current);
+                        }
+
+                        if ($current->payment_status === 'paid') {
+                            return redirect()->route('order.track', $current);
+                        }
+
+                        if (filled($current->viva_order_code)) {
+                            return redirect()->away($viva->checkoutUrl((string) $current->viva_order_code));
+                        }
+
+                        abort(409);
+                    }
 
                     // A single conditional UPDATE is atomic on its own: the code
                     // is stored only while the order is still open and has no
@@ -76,7 +136,6 @@ class VivaWalletController extends Controller
 
                     $viva->logPaymentEvent('warning', 'viva.payment_order_not_stored', [
                         'order_id' => $current->getKey(),
-                        'viva_order_code' => $orderCode,
                         'status' => $current->status->value,
                     ]);
 
@@ -133,7 +192,6 @@ class VivaWalletController extends Controller
     public function webhook(Request $request, VivaWalletService $viva): JsonResponse
     {
         $payload = $request->all();
-        $transactionId = strtolower((string) data_get($payload, 'EventData.TransactionId', ''));
 
         try {
             $result = $viva->processWebhook($payload);
@@ -141,7 +199,6 @@ class VivaWalletController extends Controller
             return response()->json(['status' => $result]);
         } catch (Throwable $e) {
             $viva->logPaymentEvent('error', 'viva.webhook_processing_failed', [
-                'transaction_id' => Str::isUuid($transactionId) ? $transactionId : null,
                 'exception' => $e::class,
             ]);
 
@@ -154,7 +211,7 @@ class VivaWalletController extends Controller
     {
         $orderCode = (string) $request->query('s', '');
 
-        abort_unless(preg_match('/^\d{1,32}$/D', $orderCode), 404);
+        abort_unless(preg_match('/^\d{16}$/D', $orderCode), 404);
 
         return Order::query()->where('viva_order_code', $orderCode)->firstOrFail();
     }
@@ -165,5 +222,13 @@ class VivaWalletController extends Controller
         $routeToken = (string) $order->getRouteKey();
 
         abort_unless($sessionToken !== '' && hash_equals($routeToken, $sessionToken), 404);
+    }
+
+    private function unknownPaymentOrderRedirect(Order $order): RedirectResponse
+    {
+        return redirect()->route('order.track', $order)->with(
+            'viva_status',
+            'Η Viva δεν επιβεβαίωσε αν δημιουργήθηκε η online πληρωμή. Μην προσπαθήσετε ξανά — η παραγγελία χρειάζεται έλεγχο.',
+        );
     }
 }

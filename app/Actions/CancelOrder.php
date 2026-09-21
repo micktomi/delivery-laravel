@@ -101,6 +101,13 @@ class CancelOrder
         // The caller may hold a stale model; decide on the current row.
         $current = Order::query()->whereKey($order->getKey())->first();
 
+        if ($current?->payment_method === PaymentMethod::Viva
+            && $current->payment_status === VivaWalletService::PAYMENT_ORDER_OUTCOME_UNKNOWN) {
+            throw ValidationException::withMessages([
+                'status' => 'Η δημιουργία της online πληρωμής δεν έχει επιβεβαιωθεί. Ελέγξτε πρώτα τη Viva και μετά λύστε την εκκρεμή κατάσταση.',
+            ]);
+        }
+
         if (! $current
             || $current->payment_method !== PaymentMethod::Viva
             || $current->payment_status !== 'pending'
