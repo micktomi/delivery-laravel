@@ -176,6 +176,37 @@ class VivaOrderCancellationTest extends TestCase
         ];
     }
 
+    /**
+     * StateId is a small enumeration. Casting "3.9" to int used to read as
+     * Paid and "0.5" as Pending, so a malformed answer could decide whether a
+     * standing payment order was left payable.
+     */
+    #[DataProvider('malformedOrderStates')]
+    public function test_a_non_integer_order_state_is_ambiguous_rather_than_a_state(mixed $stateId): void
+    {
+        $order = $this->pendingVivaOrder();
+        $this->fakeViva(retrieve: [['OrderCode' => (int) self::ORDER_CODE, 'StateId' => $stateId], 200]);
+
+        $this->assertCancellationRefused($order, 'δεν επιβεβαιώθηκε');
+
+        Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+    }
+
+    /** @return array<string, array{0: mixed}> */
+    public static function malformedOrderStates(): array
+    {
+        return [
+            'decimal string that truncates to Paid' => ['3.9'],
+            'decimal string that truncates to Pending' => ['0.5'],
+            'float' => [2.5],
+            'word' => ['paid'],
+            'empty string' => [''],
+            'null' => [null],
+            'array' => [['3']],
+            'boolean' => [true],
+        ];
+    }
+
     public function test_missing_merchant_api_credentials_refuse_the_cancellation_without_calling_viva(): void
     {
         config()->set('services.viva.reconciliation_merchant_id', '');

@@ -393,7 +393,9 @@ class VivaWalletService
         $returnedOrderCode = (string) data_get($payload, 'OrderCode', '');
         $state = data_get($payload, 'StateId');
 
-        if (! is_array($payload) || ! hash_equals($orderCode, $returnedOrderCode) || ! is_numeric($state)) {
+        if (! is_array($payload)
+            || ! hash_equals($orderCode, $returnedOrderCode)
+            || ! $this->isPaymentOrderState($state)) {
             throw $this->cancellationFailed($order, 'ambiguous');
         }
 
