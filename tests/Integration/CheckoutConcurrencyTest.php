@@ -34,7 +34,14 @@ class CheckoutConcurrencyTest extends TestCase
     {
         $database = getenv('CHECKOUT_TEST_DB_DATABASE');
         if (! $database || ! function_exists('pcntl_fork') || ! function_exists('posix_kill')) {
-            $this->markTestSkipped('Requires pcntl and an explicit disposable MariaDB database.');
+            $this->markTestSkipped(
+                'Real InnoDB row locking for concurrent checkout. Needs pcntl/posix and a'
+                .' disposable MariaDB database whose name ends in _checkout_test. Run with:'
+                .' CHECKOUT_TEST_DB_DATABASE=leonidas_checkout_test'
+                .' CHECKOUT_TEST_DB_SOCKET=/var/run/mysqld/mysqld.sock'
+                .' APP_CONFIG_CACHE=/tmp/no-config.php'
+                .' php vendor/bin/phpunit tests/Integration/CheckoutConcurrencyTest.php',
+            );
         }
         if (! preg_match('/^[a-zA-Z0-9_]+_checkout_test$/D', $database)) {
             throw new RuntimeException('Database name must end in _checkout_test.');

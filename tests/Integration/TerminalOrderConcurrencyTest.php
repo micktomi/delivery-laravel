@@ -28,7 +28,14 @@ class TerminalOrderConcurrencyTest extends TestCase
     {
         $database = getenv('TERMINAL_TEST_DB_DATABASE');
         if (! $database || ! function_exists('pcntl_fork') || ! function_exists('posix_kill')) {
-            $this->markTestSkipped('Requires pcntl and an explicit disposable MariaDB database.');
+            $this->markTestSkipped(
+                'Real InnoDB row locking for Viva start vs cancellation. Needs pcntl/posix and a'
+                .' disposable MariaDB database whose name ends in _terminal_test. Run with:'
+                .' TERMINAL_TEST_DB_DATABASE=leonidas_terminal_test'
+                .' TERMINAL_TEST_DB_SOCKET=/var/run/mysqld/mysqld.sock'
+                .' APP_CONFIG_CACHE=/tmp/no-config.php'
+                .' php vendor/bin/phpunit tests/Integration/TerminalOrderConcurrencyTest.php',
+            );
         }
         if (! preg_match('/^[a-zA-Z0-9_]+_terminal_test$/D', $database)) {
             throw new RuntimeException('Database name must end in _terminal_test.');

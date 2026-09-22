@@ -11,6 +11,13 @@
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
         </testsuite>
+        <!-- Real InnoDB row locking. Each test skips itself, naming the
+             command to run it, unless its disposable MariaDB database is set
+             in the environment. Listed here so those skips are visible in a
+             normal run instead of the suite quietly not existing. -->
+        <testsuite name="Integration">
+            <directory>tests/Integration</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
