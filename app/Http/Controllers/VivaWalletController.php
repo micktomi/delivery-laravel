@@ -36,6 +36,10 @@ class VivaWalletController extends Controller
             return $this->unknownPaymentOrderRedirect($order);
         }
 
+        if ($order->payment_status === VivaWalletService::PAYMENT_STATUS_EXPIRED) {
+            return $this->expiredPaymentOrderRedirect($order);
+        }
+
         try {
             // The per-order lock serializes checkout creation/reuse. The Viva
             // request itself stays outside any database transaction: on SQLite
@@ -56,6 +60,10 @@ class VivaWalletController extends Controller
 
                     if ($fresh->payment_status === VivaWalletService::PAYMENT_ORDER_OUTCOME_UNKNOWN) {
                         return $this->unknownPaymentOrderRedirect($fresh);
+                    }
+
+                    if ($fresh->payment_status === VivaWalletService::PAYMENT_STATUS_EXPIRED) {
+                        return $this->expiredPaymentOrderRedirect($fresh);
                     }
 
                     if (filled($fresh->viva_order_code)) {
@@ -222,6 +230,19 @@ class VivaWalletController extends Controller
         $routeToken = (string) $order->getRouteKey();
 
         abort_unless($sessionToken !== '' && hash_equals($routeToken, $sessionToken), 404);
+    }
+
+    /**
+     * Viva no longer accepts money for this payment order, so the stored
+     * checkout URL is dead. Reusing it would only show the customer an error
+     * at Viva; a new order is the only way forward.
+     */
+    private function expiredPaymentOrderRedirect(Order $order): RedirectResponse
+    {
+        return redirect()->route('order.track', $order)->with(
+            'viva_error',
+            'Ο χρόνος για την online πληρωμή αυτής της παραγγελίας έχει λήξει. Επικοινωνήστε μαζί μας για να την ολοκληρώσετε.',
+        );
     }
 
     private function unknownPaymentOrderRedirect(Order $order): RedirectResponse

@@ -239,6 +239,24 @@ class VivaPaymentOrderOutcomeTest extends TestCase
         Http::assertSentCount(1);
     }
 
+    public function test_an_expired_payment_order_never_sends_the_customer_back_to_a_dead_checkout(): void
+    {
+        $order = $this->vivaOrder([
+            'payment_status' => 'expired',
+            'viva_order_code' => self::ORDER_CODE,
+        ]);
+        Http::fake();
+
+        $this->startPayment($order)
+            ->assertRedirect(route('order.track', $order))
+            ->assertSessionHas('viva_error');
+
+        $order->refresh();
+        $this->assertSame('expired', $order->payment_status);
+        $this->assertSame(self::ORDER_CODE, $order->viva_order_code);
+        Http::assertNothingSent();
+    }
+
     public function test_an_ambiguous_order_cannot_be_cancelled_before_manual_resolution(): void
     {
         $order = $this->vivaOrder([

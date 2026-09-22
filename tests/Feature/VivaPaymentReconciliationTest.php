@@ -8,6 +8,7 @@ use App\Livewire\OrderBoard;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\VivaWalletService;
+use App\Support\VivaPaymentHealth;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -24,6 +25,15 @@ use Tests\TestCase;
 class VivaPaymentReconciliationTest extends TestCase
 {
     use RefreshDatabase;
+
+    /** Payment order StateId values of the Retrieve order API. */
+    private const STATE_PENDING = 0;
+
+    private const STATE_EXPIRED = 1;
+
+    private const STATE_CANCELED = 2;
+
+    private const STATE_PAID = 3;
 
     protected function setUp(): void
     {
@@ -70,6 +80,104 @@ class VivaPaymentReconciliationTest extends TestCase
 
         $this->assertSame('pending', $order->fresh()->payment_status);
         $this->assertNull($order->fresh()->viva_transaction_id);
+    }
+
+    public static function unpayablePaymentOrderStates(): array
+    {
+        return [
+            'expired at Viva' => [self::STATE_EXPIRED],
+            'cancelled at Viva' => [self::STATE_CANCELED],
+        ];
+    }
+
+    /**
+     * An abandoned checkout used to stay pending for ever and be re-polled
+     * every five minutes until the end of time.
+     */
+    #[DataProvider('unpayablePaymentOrderStates')]
+    public function test_a_payment_order_that_can_no_longer_be_paid_leaves_the_candidate_set(int $state): void
+    {
+        $order = $this->vivaOrder();
+        $this->fakeReconciliation($order, null, orderState: $state);
+
+        $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
+
+        $order->refresh();
+        $this->assertSame('expired', $order->payment_status);
+        $this->assertNull($order->viva_transaction_id);
+        $this->assertNull($order->paid_at);
+        // The Viva order code is kept: it is the only audit trail back to Viva.
+        $this->assertNotNull($order->viva_order_code);
+
+        // The next scheduled run must not look at this order again at all.
+        Http::fake();
+        $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
+        Http::assertNothingSent();
+    }
+
+    public function test_a_payment_order_still_pending_at_viva_stays_a_candidate(): void
+    {
+        $order = $this->vivaOrder();
+        $this->fakeReconciliation($order, null, orderState: self::STATE_PENDING);
+
+        $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
+
+        $this->assertSame('pending', $order->fresh()->payment_status);
+    }
+
+    /**
+     * Viva says paid but the search has not caught up. Expiring the order here
+     * would hide money that is already in the account.
+     */
+    public function test_a_paid_payment_order_is_never_expired_by_reconciliation(): void
+    {
+        $order = $this->vivaOrder();
+        $this->fakeReconciliation($order, null, orderState: self::STATE_PAID);
+
+        $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
+
+        $this->assertSame('pending', $order->fresh()->payment_status);
+    }
+
+    public function test_expiry_never_touches_the_local_order_status(): void
+    {
+        $order = $this->vivaOrder(['status' => OrderStatus::Cancelled->value]);
+        $this->fakeReconciliation($order, null, orderState: self::STATE_EXPIRED);
+
+        $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
+
+        $order->refresh();
+        $this->assertSame('expired', $order->payment_status);
+        $this->assertSame(OrderStatus::Cancelled, $order->status);
+    }
+
+    public function test_an_unreachable_order_state_lookup_leaves_the_order_pending_for_a_retry(): void
+    {
+        $order = $this->vivaOrder();
+        Http::fake([
+            'https://demo.vivapayments.com/api/transactions/?ordercode='.$order->viva_order_code => Http::response(
+                $this->searchResponse($order, null),
+            ),
+            'https://demo.vivapayments.com/api/orders/'.$order->viva_order_code => Http::response(['error' => 'boom'], 500),
+        ]);
+
+        $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
+
+        $this->assertSame('pending', $order->fresh()->payment_status);
+    }
+
+    public function test_an_expired_payment_is_not_counted_as_a_stale_pending_payment(): void
+    {
+        $this->vivaOrder([
+            'payment_status' => 'expired',
+            'created_at' => now()->subHours(3),
+            'placed_at' => now()->subHours(3),
+        ]);
+
+        $counts = app(VivaPaymentHealth::class)->counts();
+
+        $this->assertSame(0, $counts['pending']);
+        $this->assertSame(0, $counts['inconsistent']);
     }
 
     public function test_amount_mismatch_is_not_paid_and_is_logged_for_review(): void
@@ -253,7 +361,10 @@ class VivaPaymentReconciliationTest extends TestCase
         $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
 
         $this->assertSame('pending', $order->fresh()->payment_status);
-        Http::assertSentCount(1);
+        // The search result was unusable, so the order state is asked for as
+        // well; it answers Pending, which keeps the order a candidate.
+        Http::assertSentCount(2);
+        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/checkout/v2/transactions/'));
     }
 
     public function test_unsuccessful_search_envelope_is_a_retryable_failure(): void
@@ -355,12 +466,23 @@ class VivaPaymentReconciliationTest extends TestCase
         ], $overrides));
     }
 
-    private function fakeReconciliation(Order $order, ?string $transactionId, array $overrides = [], ?array $search = null): void
-    {
+    private function fakeReconciliation(
+        Order $order,
+        ?string $transactionId,
+        array $overrides = [],
+        ?array $search = null,
+        int $orderState = self::STATE_PENDING,
+    ): void {
         $responses = [
             'https://demo.vivapayments.com/api/transactions/?ordercode='.$order->viva_order_code => Http::response(
                 $search ?? $this->searchResponse($order, $transactionId),
             ),
+            // Asked only when the search produced no payable transaction, to
+            // find out whether the customer can still pay this order at all.
+            'https://demo.vivapayments.com/api/orders/'.$order->viva_order_code => Http::response([
+                'OrderCode' => (int) $order->viva_order_code,
+                'StateId' => $orderState,
+            ]),
         ];
 
         if ($transactionId !== null) {

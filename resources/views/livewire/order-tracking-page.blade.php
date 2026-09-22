@@ -54,7 +54,12 @@
         </div>
     @endif
 
-    @if($order->payment_method === \App\Enums\PaymentMethod::Viva && $order->payment_status !== 'paid' && !$isCancelled)
+    @if($order->payment_method === \App\Enums\PaymentMethod::Viva && $order->payment_status === \App\Services\VivaWalletService::PAYMENT_STATUS_EXPIRED && !$isCancelled)
+        <div class="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm leading-snug text-red-800">
+            <p class="font-bold">Ο χρόνος για την online πληρωμή έχει λήξει.</p>
+            <p class="mt-1">Επικοινώνησε μαζί μας για να ολοκληρωθεί η παραγγελία.</p>
+        </div>
+    @elseif($order->payment_method === \App\Enums\PaymentMethod::Viva && $order->payment_status !== 'paid' && !$isCancelled)
         <div class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm leading-snug text-amber-950">
             <p class="font-bold">Αναμονή επιβεβαίωσης online πληρωμής.</p>
             <p class="mt-1">Η κουζίνα θα λάβει την παραγγελία μόνο μετά την επιβεβαίωση της Viva.</p>

@@ -33,7 +33,7 @@ class ReconcileVivaPayments extends Command
         }
 
         $olderThan = now()->subMinutes(self::MINIMUM_AGE_MINUTES);
-        $results = ['paid' => 0, 'pending' => 0, 'duplicate' => 0, 'ignored' => 0, 'failed' => 0];
+        $results = ['paid' => 0, 'pending' => 0, 'duplicate' => 0, 'expired' => 0, 'ignored' => 0, 'failed' => 0];
 
         Order::query()
             ->where('payment_method', PaymentMethod::Viva->value)
@@ -56,10 +56,11 @@ class ReconcileVivaPayments extends Command
             });
 
         $this->line(sprintf(
-            'Viva reconciliation: %d paid, %d pending, %d duplicate, %d ignored, %d failed.',
+            'Viva reconciliation: %d paid, %d pending, %d duplicate, %d expired, %d ignored, %d failed.',
             $results['paid'],
             $results['pending'],
             $results['duplicate'],
+            $results['expired'],
             $results['ignored'],
             $results['failed'],
         ));

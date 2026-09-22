@@ -27,6 +27,14 @@ class VivaWalletService
 {
     public const PAYMENT_ORDER_OUTCOME_UNKNOWN = 'payment_order_unknown';
 
+    /**
+     * Terminal local payment state for a payment order Viva will never accept
+     * money for again. It exists so an abandoned checkout stops being a
+     * reconciliation candidate instead of being polled every five minutes for
+     * the rest of the installation's life.
+     */
+    public const PAYMENT_STATUS_EXPIRED = 'expired';
+
     private const PAYMENT_CREATED_EVENT = 1796;
 
     private const EURO_CURRENCY_CODE = '978';
@@ -204,7 +212,87 @@ class VivaWalletService
             }
         }
 
-        return $result;
+        // No money arrived for this order. If Viva will not take any either,
+        // the order has to leave the candidate set: nothing else ever would.
+        return $this->expireUnpayablePaymentOrder($order, $orderCode) ? 'expired' : $result;
+    }
+
+    /**
+     * Retires a payment order Viva reports as expired or cancelled. Only the
+     * local payment state moves; the order's own status is never touched, so a
+     * terminal order stays exactly as the kitchen left it.
+     */
+    private function expireUnpayablePaymentOrder(Order $order, string $orderCode): bool
+    {
+        $state = $this->reconciliationPaymentOrderState($orderCode, $order->getKey());
+
+        if ($state !== self::PAYMENT_ORDER_EXPIRED && $state !== self::PAYMENT_ORDER_CANCELED) {
+            return false;
+        }
+
+        // Conditional update: a payment confirmed between the lookup and here
+        // owns the row, and this must never overwrite it.
+        $expired = Order::query()
+            ->whereKey($order->getKey())
+            ->where('payment_status', 'pending')
+            ->where('viva_order_code', $orderCode)
+            ->update(['payment_status' => self::PAYMENT_STATUS_EXPIRED]);
+
+        if ($expired !== 1) {
+            return false;
+        }
+
+        $this->logPaymentEvent('info', 'viva.payment_order_expired', [
+            'order_id' => $order->getKey(),
+            'state' => $state,
+        ]);
+
+        return true;
+    }
+
+    /**
+     * Best-effort read of the remote payment-order state during reconciliation.
+     * Any answer that is not a clean, matching state returns null and the order
+     * simply stays a candidate for the next run: a transport blip must never
+     * retire an order the customer can still pay.
+     */
+    private function reconciliationPaymentOrderState(string $orderCode, int|string $localOrderId): ?int
+    {
+        $endpoint = '/api/orders/{orderCode}';
+
+        try {
+            $response = $this->sendRequest(
+                fn (): Response => $this->reconciliationApiClient()->get('/api/orders/'.$orderCode),
+                $endpoint,
+            );
+        } catch (VivaTransportException) {
+            return null;
+        }
+
+        if ($this->httpFailureReason($response) !== null) {
+            $this->logPaymentEvent('warning', 'viva.reconciliation_order_state_unavailable', [
+                'order_id' => $localOrderId,
+                'http_status' => $response->status(),
+            ]);
+
+            return null;
+        }
+
+        $payload = $response->json();
+        $returnedOrderCode = (string) data_get($payload, 'OrderCode', '');
+        $state = data_get($payload, 'StateId');
+
+        if (! is_array($payload)
+            || ! hash_equals($orderCode, $returnedOrderCode)
+            || ! $this->isPaymentOrderState($state)) {
+            $this->logPaymentEvent('warning', 'viva.reconciliation_invalid_order_state', [
+                'order_id' => $localOrderId,
+            ]);
+
+            return null;
+        }
+
+        return (int) $state;
     }
 
     public function reconciliationIsConfigured(): bool
@@ -739,5 +827,11 @@ class VivaWalletService
     private function isOrderCode(string $orderCode): bool
     {
         return preg_match('/^\d{16}$/D', $orderCode) === 1;
+    }
+
+    /** StateId is a small enumeration, so "3.9" is a malformed answer, not Paid. */
+    private function isPaymentOrderState(mixed $state): bool
+    {
+        return is_int($state) || (is_string($state) && preg_match('/^\d+$/D', $state) === 1);
     }
 }
