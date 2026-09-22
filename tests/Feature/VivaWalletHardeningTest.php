@@ -238,16 +238,37 @@ class VivaWalletHardeningTest extends TestCase
         }
     }
 
+    /**
+     * The lease must outlive the worst case it protects, so it is derived from
+     * the HTTP budget rather than pinned to a number: raising the request
+     * timeout has to break this test, not silently shorten the margin.
+     */
     public function test_payment_start_lock_covers_the_full_oauth_and_order_request_budget(): void
     {
-        $reflection = new \ReflectionClass(VivaWalletController::class);
-        $lockSeconds = $reflection->getReflectionConstant('PAYMENT_START_LOCK_SECONDS')?->getValue();
+        $lockSeconds = (new \ReflectionClass(VivaWalletController::class))
+            ->getReflectionConstant('PAYMENT_START_LOCK_SECONDS')?->getValue();
+        $timeout = (new \ReflectionClass(VivaWalletService::class))
+            ->getReflectionConstant('HTTP_TIMEOUT_SECONDS')?->getValue();
 
-        $this->assertSame(45, $lockSeconds);
+        $this->assertIsInt($lockSeconds);
+        $this->assertIsInt($timeout);
+
+        // Waiting out another worker's OAuth refresh lock, then the token
+        // request, then the create-order request.
+        $oauthLockWait = $timeout + 5;
+        $worstCase = $oauthLockWait + (2 * $timeout);
+
         $this->assertGreaterThan(
-            35,
+            $worstCase,
             $lockSeconds,
-            'The lock must outlive a 15-second OAuth lock wait, a 10-second token request, and a 10-second order request.',
+            sprintf(
+                'The %ds lock lease must outlive the %ds worst case: a %ds OAuth lock wait, a %ds token request and a %ds order request.',
+                $lockSeconds,
+                $worstCase,
+                $oauthLockWait,
+                $timeout,
+                $timeout,
+            ),
         );
     }
 
