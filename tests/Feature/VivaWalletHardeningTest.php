@@ -251,6 +251,61 @@ class VivaWalletHardeningTest extends TestCase
         );
     }
 
+    /**
+     * Amounts arrive from Viva as JSON numbers and used to go through
+     * round($amount * 100), so 4.995 became 500 cents and satisfied a 5.00
+     * order. Viva sends two decimals, so anything else is a malformed answer
+     * and must be refused rather than quietly rounded into a match.
+     */
+    public function test_a_sub_cent_amount_is_refused_instead_of_being_rounded_into_a_match(): void
+    {
+        $order = $this->vivaOrder(['viva_order_code' => '7680701046572600']);
+        $transactionId = (string) Str::uuid();
+
+        foreach ([4.995, 5.001, '4.995', '5e0', '0x5'] as $amount) {
+            Cache::put($this->tokenCacheKey(), 'cached-token', 3600);
+            Http::fake([
+                'https://demo-api.vivapayments.com/checkout/v2/transactions/'.$transactionId => Http::response([
+                    'amount' => $amount,
+                    'orderCode' => '7680701046572600',
+                    'statusId' => 'F',
+                    'currencyCode' => '978',
+                ]),
+            ]);
+
+            $this->assertSame('ignored', app(VivaWalletService::class)->processWebhook([
+                'EventTypeId' => 1796,
+                'EventData' => ['TransactionId' => $transactionId, 'OrderCode' => '7680701046572600'],
+            ]), 'amount '.var_export($amount, true));
+
+            $order->refresh();
+            $this->assertSame('pending', $order->payment_status, 'amount '.var_export($amount, true));
+            $this->assertNull($order->paid_at);
+        }
+    }
+
+    public function test_the_amounts_viva_actually_sends_are_still_accepted(): void
+    {
+        foreach ([5.00, 5, '5.00', '5'] as $amount) {
+            $order = $this->vivaOrder(['viva_order_code' => (string) (7680701046572600 + count(Order::all()))]);
+            $transactionId = (string) Str::uuid();
+            Cache::put($this->tokenCacheKey(), 'cached-token', 3600);
+            Http::fake([
+                'https://demo-api.vivapayments.com/checkout/v2/transactions/'.$transactionId => Http::response([
+                    'amount' => $amount,
+                    'orderCode' => $order->viva_order_code,
+                    'statusId' => 'F',
+                    'currencyCode' => '978',
+                ]),
+            ]);
+
+            $this->assertSame('paid', app(VivaWalletService::class)->processWebhook([
+                'EventTypeId' => 1796,
+                'EventData' => ['TransactionId' => $transactionId, 'OrderCode' => $order->viva_order_code],
+            ]), 'amount '.var_export($amount, true));
+        }
+    }
+
     private function configureViva(): void
     {
         config()->set('services.viva', [

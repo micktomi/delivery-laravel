@@ -813,15 +813,54 @@ class VivaWalletService
         return (int) round((float) $order->total * 100, 0, PHP_ROUND_HALF_UP);
     }
 
+    /**
+     * Viva quotes amounts in euros with two decimals. Anything else is a
+     * malformed answer, not something to round into a match: round($amount *
+     * 100) used to turn 4.995 into 500 cents, which satisfied a 5.00 order.
+     * Returns null for every input this cannot convert exactly.
+     */
     private function amountInCents(mixed $amount): ?int
     {
-        if (! is_numeric($amount)) {
+        $decimal = $this->twoDecimalAmount($amount);
+
+        if ($decimal === null) {
             return null;
         }
 
-        $cents = (int) round((float) $amount * 100, 0, PHP_ROUND_HALF_UP);
+        [$whole, $fraction] = array_pad(explode('.', $decimal, 2), 2, '');
+        $fraction = str_pad($fraction, 2, '0');
 
-        return $cents >= 0 ? $cents : null;
+        if ((int) $whole > intdiv(PHP_INT_MAX - (int) $fraction, 100)) {
+            return null;
+        }
+
+        return ((int) $whole * 100) + (int) $fraction;
+    }
+
+    /** Normalises a Viva amount to a plain non-negative decimal string, or null. */
+    private function twoDecimalAmount(mixed $amount): ?string
+    {
+        if (is_int($amount)) {
+            return $amount >= 0 ? $amount.'.00' : null;
+        }
+
+        if (is_float($amount)) {
+            if (! is_finite($amount) || $amount < 0) {
+                return null;
+            }
+
+            // A float carrying more than two decimals is not an amount Viva
+            // can have quoted, so it is refused rather than rounded.
+            $rendered = sprintf('%.4F', $amount);
+
+            return str_ends_with($rendered, '00') ? substr($rendered, 0, -2) : null;
+        }
+
+        if (is_string($amount) && preg_match('/^\d+(?:\.\d{1,2})?$/D', trim($amount)) === 1) {
+            return trim($amount);
+        }
+
+        return null;
     }
 
     private function isOrderCode(string $orderCode): bool
