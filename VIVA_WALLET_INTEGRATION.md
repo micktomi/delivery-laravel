@@ -16,6 +16,17 @@ VIVA_RECONCILIATION_API_KEY=
 
 Το `VIVA_ENVIRONMENT` δέχεται `demo` ή `production` (`live` γίνεται επίσης δεκτό ως production alias). Μετά την αλλαγή env/config απαιτείται το συνήθες `php artisan config:clear` ή rebuild του production config cache. Πριν από δοκιμή χρειάζεται και εκτέλεση του νέου migration.
 
+### Τι ακριβώς σταματά το `VIVA_ENABLED=false`
+
+Ο διακόπτης σταματά **μόνο νέες πληρωμές**, όχι πληρωμές που βρίσκονται ήδη σε εξέλιξη. Με `VIVA_ENABLED=false`:
+
+- Η Viva δεν εμφανίζεται στο checkout και το `/payments/viva/{order}/start` επιστρέφει 404, οπότε δεν δημιουργείται ούτε επαναχρησιμοποιείται payment order.
+- Το webhook **παραμένει ενεργό**. Αν ένας πελάτης βρισκόταν στη σελίδα της Viva τη στιγμή που έκλεισε ο διακόπτης, η καθυστερημένη επιβεβαίωση προσγειώνεται κανονικά: ο server επαληθεύει τη συναλλαγή και μαρκάρει την παραγγελία `paid`. Αυτό προϋποθέτει ότι τα credentials παραμένουν στο `.env` — αν τα αφαιρέσεις, τα χρήματα κινούνται χωρίς τοπική εγγραφή.
+- Το GET verification handshake συνεχίζει να απαντά, ώστε να μη χαλάσει η εγγραφή του webhook στο Viva dashboard.
+- **Ασυμμετρία που πρέπει να ξέρεις:** το `viva:reconcile-pending-payments` αντίθετα βγαίνει αμέσως όταν η Viva είναι απενεργοποιημένη. Ένα webhook που *χάθηκε* όσο ο διακόπτης ήταν κλειστός δεν ανακτάται αυτόματα — χρειάζεται προσωρινή επαναφορά σε `VIVA_ENABLED=true` για ένα run, ή χειροκίνητος έλεγχος στο Viva dashboard.
+
+Το συμβόλαιο αυτό κατοχυρώνεται από το `tests/Feature/VivaDisabledSwitchTest.php`.
+
 Τα `VIVA_RECONCILIATION_MERCHANT_ID` και `VIVA_RECONCILIATION_API_KEY` είναι τα Merchant API credentials για το Viva **Retrieve Order** endpoint· δεν είναι τα OAuth client credentials. Απαιτούνται μόνο όταν `VIVA_ENABLED=true`, ώστε το fallback reconciliation να μπορεί να βρει το transaction ID για pending payment order. Αν λείπουν, η εντολή τερματίζει με failure και γράφει ασφαλές operational event, χωρίς να αλλάξει παραγγελίες.
 
 ## Routes
