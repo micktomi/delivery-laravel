@@ -101,12 +101,58 @@ class VivaDisabledSwitchTest extends TestCase
     }
 
     /**
-     * The asymmetry worth knowing about: a webhook that never arrives while
-     * Viva is disabled is not recovered automatically, because the scheduled
-     * reconciliation opts out of a disabled integration entirely.
+     * A webhook lost while the switch was closed still has to be recoverable,
+     * for the same reason the webhook itself stays open. Reconciliation only
+     * ever looks at orders that already reached Smart Checkout, so it cannot
+     * start a payment the switch was meant to prevent.
      */
-    public function test_reconciliation_opts_out_entirely_while_viva_is_disabled(): void
+    public function test_a_payment_already_in_flight_is_still_reconciled_while_viva_is_disabled(): void
     {
+        $order = $this->vivaOrder([
+            'created_at' => now()->subMinutes(30),
+            'placed_at' => now()->subMinutes(30),
+        ]);
+        $transactionId = (string) Str::uuid();
+        $this->fakeReconciliation($transactionId);
+
+        $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
+
+        $order->refresh();
+        $this->assertSame('paid', $order->payment_status);
+        $this->assertSame($transactionId, $order->viva_transaction_id);
+        $this->assertNotNull($order->paid_at);
+
+        // The switch still forbids anything that would start a new payment.
+        Http::assertNotSent(fn ($request): bool => $request->url()
+            === 'https://demo-api.vivapayments.com/checkout/v2/orders');
+    }
+
+    public function test_an_order_that_never_reached_smart_checkout_is_left_alone_while_viva_is_disabled(): void
+    {
+        $order = $this->vivaOrder([
+            'viva_order_code' => null,
+            'created_at' => now()->subMinutes(30),
+            'placed_at' => now()->subMinutes(30),
+        ]);
+        Http::fake();
+
+        $this->artisan('viva:reconcile-pending-payments')->assertExitCode(0);
+
+        $order->refresh();
+        $this->assertSame('pending', $order->payment_status);
+        $this->assertNull($order->viva_order_code);
+        Http::assertNothingSent();
+    }
+
+    /**
+     * Decommissioning: Viva off and the Merchant API credentials removed. A
+     * scheduled command must not start failing every five minutes over a
+     * integration nobody is using any more.
+     */
+    public function test_reconciliation_still_opts_out_when_the_credentials_are_gone(): void
+    {
+        config()->set('services.viva.reconciliation_merchant_id', '');
+        config()->set('services.viva.reconciliation_api_key', '');
         $this->vivaOrder([
             'created_at' => now()->subMinutes(30),
             'placed_at' => now()->subMinutes(30),
@@ -118,6 +164,45 @@ class VivaDisabledSwitchTest extends TestCase
             ->assertExitCode(0);
 
         Http::assertNothingSent();
+    }
+
+    /** Missing credentials while Viva is live stays the loud misconfiguration it was. */
+    public function test_missing_credentials_while_viva_is_enabled_is_still_a_failure(): void
+    {
+        $this->configureViva(enabled: true);
+        config()->set('services.viva.reconciliation_merchant_id', '');
+        config()->set('services.viva.reconciliation_api_key', '');
+        Http::fake();
+
+        $this->artisan('viva:reconcile-pending-payments')
+            ->expectsOutput('Viva reconciliation credentials are not configured.')
+            ->assertExitCode(1);
+
+        Http::assertNothingSent();
+    }
+
+    private function fakeReconciliation(string $transactionId): void
+    {
+        Http::fake([
+            'https://demo.vivapayments.com/api/transactions/?ordercode='.self::ORDER_CODE => Http::response([
+                'Success' => true,
+                'ErrorCode' => 0,
+                'Transactions' => [[
+                    'TransactionId' => $transactionId,
+                    'Order' => ['OrderCode' => (int) self::ORDER_CODE],
+                ]],
+            ]),
+            'https://demo-accounts.vivapayments.com/connect/token' => Http::response([
+                'access_token' => 'test-access-token',
+                'expires_in' => 3600,
+            ]),
+            'https://demo-api.vivapayments.com/checkout/v2/transactions/'.$transactionId => Http::response([
+                'amount' => 5.00,
+                'orderCode' => self::ORDER_CODE,
+                'statusId' => 'F',
+                'currencyCode' => '978',
+            ]),
+        ]);
     }
 
     private function configureViva(bool $enabled): void

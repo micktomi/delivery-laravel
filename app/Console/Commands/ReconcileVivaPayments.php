@@ -19,17 +19,30 @@ class ReconcileVivaPayments extends Command
 
     public function handle(VivaWalletService $viva): int
     {
-        if (! (bool) config('services.viva.enabled')) {
-            $this->line('Viva payments are disabled; reconciliation skipped.');
-
-            return self::SUCCESS;
-        }
+        $enabled = (bool) config('services.viva.enabled');
 
         if (! $viva->reconciliationIsConfigured()) {
+            // Viva off and the credentials gone is a decommissioned
+            // integration, not a misconfiguration to fail on every five
+            // minutes. Missing credentials while Viva is live still is.
+            if (! $enabled) {
+                $this->line('Viva payments are disabled; reconciliation skipped.');
+
+                return self::SUCCESS;
+            }
+
             $viva->logPaymentEvent('warning', 'viva.reconciliation_not_configured');
             $this->error('Viva reconciliation credentials are not configured.');
 
             return self::FAILURE;
+        }
+
+        // The switch stops new payments, not payments already in flight. Every
+        // candidate below already reached Smart Checkout and has a payment
+        // order code, and nothing on this path can create one, so a disabled
+        // integration still lands money that moved before it was closed.
+        if (! $enabled) {
+            $this->line('Viva payments are disabled; reconciling payments already in flight.');
         }
 
         $olderThan = now()->subMinutes(self::MINIMUM_AGE_MINUTES);
