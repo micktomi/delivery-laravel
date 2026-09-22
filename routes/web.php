@@ -22,7 +22,11 @@ Route::get('/payments/viva/success', [VivaWalletController::class, 'success'])->
 Route::get('/payments/viva/failure', [VivaWalletController::class, 'failure'])->name('viva.failure');
 Route::get('/payments/viva/webhook', [VivaWalletController::class, 'webhookVerify'])
     ->name('viva.webhook.verify');
+// Unauthenticated, and every accepted payload costs one OAuth-authenticated
+// Retrieve Transaction call to Viva. The ceiling sits far above Viva's real
+// delivery and retry rate, so it only bites on abuse.
 Route::post('/payments/viva/webhook', [VivaWalletController::class, 'webhook'])
+    ->middleware('throttle:300,1')
     ->name('viva.webhook');
 
 Route::get('/kitchen', OrderBoard::class)->name('kitchen')->middleware('auth');

@@ -50,7 +50,7 @@ https://YOUR-DOMAIN/payments/viva/webhook
 
 Το return του browser δεν αποτελεί απόδειξη πληρωμής. Το webhook χρησιμοποιείται μόνο ως trigger: ο server ανακτά τη συναλλαγή από το OAuth-authenticated Viva Retrieve Transaction API και ελέγχει `orderCode`, status `F`, EUR currency code `978` και ακριβές server-calculated order total. Τα `viva_order_code` και `viva_transaction_id` είναι unique και η επεξεργασία duplicate webhook είναι idempotent. Pending Viva orders δεν περνούν σε kitchen/courier πριν επιβεβαιωθούν.
 
-Το webhook δεν έχει πλέον fixed `throttle:60,1`: η Viva μπορεί να κάνει retries/παράλληλες παραδόσεις και το server-to-server verification παραμένει η ουσιαστική προστασία. Ακατάλληλα EventType, OrderCode ή TransactionId απορρίπτονται πριν από κλήση στη Viva.
+Το webhook φέρει per-IP `throttle:300,1`. Το όριο δεν προστατεύει από πλαστές πληρωμές — αυτό το κάνει το server-to-server verification — αλλά από κατανάλωση quota: το endpoint είναι unauthenticated και **κάθε αποδεκτό payload κοστίζει μία OAuth-authenticated κλήση Retrieve Transaction στη Viva**. Όποιος γνωρίζει ένα ζωντανό 16ψήφιο order code (κάθε πελάτης ξέρει το δικό του, είναι στο redirect URL του checkout) θα μπορούσε διαφορετικά να κάψει το quota του λογαριασμού ένα POST τη φορά. Τα 300/λεπτό ανά IP είναι πολύ πάνω από τον πραγματικό ρυθμό παράδοσης και retries της Viva, οπότε το όριο ενεργοποιείται μόνο σε κατάχρηση. Δεν αντικαθιστά το IP allowlist στο firewall/CDN. Ακατάλληλα EventType, OrderCode ή TransactionId απορρίπτονται πριν από κλήση στη Viva.
 
 ## Missed-webhook reconciliation
 

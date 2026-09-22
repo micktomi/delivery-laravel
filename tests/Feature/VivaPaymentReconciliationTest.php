@@ -307,12 +307,35 @@ class VivaPaymentReconciliationTest extends TestCase
         $this->assertTrue($event->withoutOverlapping);
     }
 
-    public function test_viva_webhook_has_no_fixed_throttle_middleware(): void
+    /**
+     * The webhook is unauthenticated and every accepted payload costs one
+     * OAuth-authenticated Retrieve Transaction call to Viva, so anyone holding
+     * a live order code could burn the account's API quota one POST at a time.
+     * The ceiling has to sit far above Viva's real delivery and retry rate.
+     */
+    public function test_viva_webhook_is_rate_limited_well_above_vivas_delivery_rate(): void
     {
         $webhook = Route::getRoutes()->getByName('viva.webhook');
 
         $this->assertNotNull($webhook);
-        $this->assertNotContains('throttle:60,1', $webhook->gatherMiddleware());
+        $this->assertContains('throttle:300,1', $webhook->gatherMiddleware());
+    }
+
+    public function test_a_burst_of_legitimate_webhooks_below_the_limit_is_never_throttled(): void
+    {
+        $order = $this->vivaOrder();
+        Http::fake();
+
+        // Unrelated event type: exercises the throttle without spending a
+        // Retrieve Transaction call per request.
+        for ($i = 0; $i < 60; $i++) {
+            $this->postJson(route('viva.webhook'), [
+                'EventTypeId' => 1797,
+                'EventData' => ['TransactionId' => (string) Str::uuid(), 'OrderCode' => $order->viva_order_code],
+            ])->assertOk()->assertJson(['status' => 'ignored']);
+        }
+
+        Http::assertNothingSent();
     }
 
     public static function rejectedVerifiedTransactions(): array
