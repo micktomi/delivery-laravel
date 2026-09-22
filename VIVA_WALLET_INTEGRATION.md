@@ -10,6 +10,7 @@ VIVA_CLIENT_ID=
 VIVA_CLIENT_SECRET=
 VIVA_SOURCE_CODE=
 VIVA_ENVIRONMENT=demo
+VIVA_WEBHOOK_VERIFICATION_KEY=
 VIVA_RECONCILIATION_MERCHANT_ID=
 VIVA_RECONCILIATION_API_KEY=
 ```
@@ -27,7 +28,15 @@ VIVA_RECONCILIATION_API_KEY=
 
 Το συμβόλαιο αυτό κατοχυρώνεται από το `tests/Feature/VivaDisabledSwitchTest.php`.
 
-Τα `VIVA_RECONCILIATION_MERCHANT_ID` και `VIVA_RECONCILIATION_API_KEY` είναι τα Merchant API credentials για το Viva **Retrieve Order** endpoint· δεν είναι τα OAuth client credentials. Απαιτούνται μόνο όταν `VIVA_ENABLED=true`, ώστε το fallback reconciliation να μπορεί να βρει το transaction ID για pending payment order. Αν λείπουν, η εντολή τερματίζει με failure και γράφει ασφαλές operational event, χωρίς να αλλάξει παραγγελίες.
+Τα `VIVA_RECONCILIATION_MERCHANT_ID` και `VIVA_RECONCILIATION_API_KEY` είναι τα Merchant API credentials (Basic auth)· δεν είναι τα OAuth client credentials. Εξυπηρετούν τρία endpoints:
+
+| Endpoint | Χρήση |
+|---|---|
+| `GET /api/transactions/?ordercode=` | Transaction search — από εδώ βρίσκονται τα candidate transaction IDs μιας pending παραγγελίας. |
+| `GET /api/orders/{orderCode}` | Retrieve order — `StateId` 0 Pending, 1 Expired, 2 Canceled, 3 Paid. |
+| `DELETE /api/orders/{orderCode}` | Ακύρωση standing payment order πριν την τοπική ακύρωση. |
+
+Απαιτούνται μόνο όταν `VIVA_ENABLED=true`. Αν λείπουν, η εντολή reconciliation τερματίζει με failure και γράφει ασφαλές operational event χωρίς να αλλάξει παραγγελίες — και η ακύρωση μιας pending Viva παραγγελίας από τον admin απορρίπτεται, ώστε να μην ακυρωθεί τοπικά κάτι που παραμένει πληρωτέο στη Viva.
 
 ## Routes
 
@@ -54,9 +63,26 @@ https://YOUR-DOMAIN/payments/viva/webhook
 
 ## Missed-webhook reconciliation
 
-Το `viva:reconcile-pending-payments` εκτελείται από Laravel scheduler κάθε 5 λεπτά. Εξετάζει μόνο Viva orders που είναι ακόμη `pending`, έχουν Viva order code, δεν είναι `completed` ή `cancelled`, και δημιουργήθηκαν πριν από τουλάχιστον 5 αλλά όχι πάνω από 90 λεπτά.
+Το `viva:reconcile-pending-payments` εκτελείται από Laravel scheduler κάθε 5 λεπτά. Εξετάζει Viva orders που είναι ακόμη `pending`, έχουν Viva order code, δεν είναι `completed`, και δημιουργήθηκαν πριν από τουλάχιστον 5 λεπτά. **Δεν υπάρχει άνω χρονικό όριο** — μια πληρωμή ανακτάται ακόμη και μετά από πολυήμερο outage. Οι `cancelled` παραγγελίες συμπεριλαμβάνονται σκόπιμα, ώστε χρήματα που κινήθηκαν αργά να εντοπίζονται.
 
-Για κάθε candidate ανακτά το transaction ID από Retrieve Order και κατόπιν περνά το Retrieve Transaction response από την ίδια payment-confirmation λογική με το webhook: order code, `F`, `978`, exact cents amount, database transaction, `lockForUpdate()` και unique transaction ID. Περιπτώσεις mismatch, malformed IDs ή προσωρινά errors γράφονται στο `payments` log χωρίς PII για manual review. Η reconciliation δεν μεταβάλλει terminal orders· ένα late webhook συνεχίζει να δίνει το ήδη υπάρχον critical refund/manual-review signal για cancelled order.
+Για κάθε candidate ανακτά τα candidate transaction IDs από το transaction search (`GET /api/transactions/?ordercode=`) και κατόπιν περνά κάθε Retrieve Transaction response από την ίδια payment-confirmation λογική με το webhook: order code, `F`, `978`, exact cents amount, database transaction, `lockForUpdate()` και unique transaction ID. Περιπτώσεις mismatch, malformed IDs ή προσωρινά errors γράφονται στο `payments` log χωρίς PII για manual review. Η reconciliation δεν μεταβάλλει terminal orders· ένα late webhook συνεχίζει να δίνει το ήδη υπάρχον critical refund/manual-review signal για cancelled order.
+
+### Λήξη εγκαταλελειμμένων checkouts
+
+Όταν το search δεν δώσει πληρωτέα συναλλαγή, η reconciliation ρωτά το `GET /api/orders/{orderCode}`. Αν το `StateId` είναι 1 (Expired) ή 2 (Canceled), η παραγγελία περνά στο τερματικό `payment_status = 'expired'`: φεύγει από το candidate set και από τον μετρητή «εκκρεμείς πληρωμές» του admin. Χωρίς αυτό, κάθε πελάτης που άνοιγε το Smart Checkout και δεν πλήρωνε άφηνε μια παραγγελία που ξαναρωτιόταν κάθε 5 λεπτά επ' άπειρον.
+
+`StateId` 0 (Pending) και 3 (Paid) δεν αλλάζουν τίποτα. Οποιαδήποτε μη αξιοποιήσιμη απάντηση — transport failure, HTTP error, αταίριαστο order code, malformed `StateId` — αφήνει την παραγγελία `pending` για το επόμενο run. Το `status` της παραγγελίας δεν μεταβάλλεται ποτέ από αυτή τη διαδρομή. Μια ληγμένη παραγγελία δεν μπορεί πλέον να ξεκινήσει checkout και η σελίδα tracking δείχνει μήνυμα λήξης αντί για κουμπί πληρωμής.
+
+### Άγνωστο αποτέλεσμα δημιουργίας payment order
+
+Αν χαθεί η απόκριση του `POST /checkout/v2/orders` (η Viva μπορεί να δημιούργησε ή να μη δημιούργησε payment order), η παραγγελία παίρνει `payment_status = 'payment_order_unknown'`. Σε αυτή την κατάσταση: δεν γίνεται δεύτερη προσπάθεια πληρωμής, δεν επιτρέπεται ακύρωση από τον admin, και **η reconciliation δεν την πιάνει** — δεν υπάρχει order code για να ψάξει. Εμφανίζεται στον μετρητή «ασυνέπειες πληρωμών» του admin και λύνεται χειροκίνητα μετά από έλεγχο στο Viva dashboard:
+
+```bash
+php artisan viva:resolve-ambiguous-payment {order} --order-code=0000000000000000
+php artisan viva:resolve-ambiguous-payment {order} --not-created
+```
+
+Η πρώτη μορφή συνδέει την παραγγελία με payment order που βρέθηκε στο dashboard και την επαναφέρει σε `pending`, οπότε ξαναμπαίνει στην κανονική reconciliation. Η δεύτερη επιβεβαιώνει ότι δεν δημιουργήθηκε τίποτα και επιτρέπει μία καθαρή νέα προσπάθεια πληρωμής.
 
 Στον production cron απαιτείται το Laravel scheduler, συνήθως:
 
@@ -67,7 +93,7 @@ https://YOUR-DOMAIN/payments/viva/webhook
 ## Τι απομένει για πραγματικό sandbox test
 
 1. Δημιουργία demo Smart Checkout credentials και online payment source, με τα σωστά return URLs και source code.
-2. Ρύθμιση του Viva webhook `Transaction Payment Created` προς το παραπάνω URL. Η Viva απαιτεί ξεχωριστό `GET` verification handshake με Merchant ID/API Key για merchant-level registration· αυτό δεν προστέθηκε σκόπιμα, επειδή δεν ανήκει στα πέντε Smart Checkout env variables του scaffold. Πρέπει να ολοκληρωθεί κατά το sandbox onboarding πριν ενεργοποιηθεί το webhook στο Viva dashboard.
+2. Ρύθμιση του Viva webhook `Transaction Payment Created` προς το παραπάνω URL. Το `GET` verification handshake που ζητά η Viva υλοποιείται ήδη στο ίδιο URL (`viva.webhook.verify`) και επιστρέφει το `VIVA_WEBHOOK_VERIFICATION_KEY` ως `{"Key": "..."}` — αρκεί να έχει οριστεί το env variable πριν πατηθεί «Verify» στο Viva dashboard.
 3. Επιβεβαίωση HTTPS/TLS, των τρεχόντων Viva webhook IP allowlists στο firewall/CDN και των success/failure URLs.
 4. HTTP sandbox test με Viva test card και έλεγχος create order → redirect → webhook → `paid_at`.
 5. Μόνο στο sandbox environment, αλλαγή σε `VIVA_ENABLED=true`. Production credentials και `VIVA_ENVIRONMENT=production` μπαίνουν αφού ολοκληρωθεί επιτυχώς όλη η sandbox ροή.
